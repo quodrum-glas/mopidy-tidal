@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class TidalBackend(ThreadingActor, backend.Backend):
+    EXT = Extension.ext_name
+
     def __init__(self, config, audio):
         super(TidalBackend, self).__init__()
         self._session = None
@@ -21,8 +23,11 @@ class TidalBackend(ThreadingActor, backend.Backend):
         context.set_config(self._config)
         self.playback = playback.TidalPlaybackProvider(audio=audio, backend=self)
         self.library = library.TidalLibraryProvider(backend=self)
-        self.playlists = playlists.TidalPlaylistsProvider(backend=self)
-        self.uri_schemes = ["tidal"]
+        self.playlists = playlists.TidalPlaylistsProvider(
+            backend=self,
+            playlist_cache_ttl=self._config[self.EXT]["playlist_cache_refresh_secs"]
+        )
+        self.uri_schemes = [self.EXT]
 
     def oauth_login_new_session(self, oauth_file):
         # create a new session
@@ -38,11 +43,11 @@ class TidalBackend(ThreadingActor, backend.Backend):
                 json.dump(data, outfile)
 
     def on_start(self):
-        quality = self._config["tidal"]["quality"]
+        quality = self._config[self.EXT]["quality"]
         logger.info("Connecting to TIDAL.. Quality = %s" % quality)
         config = Config(quality=Quality(quality))
-        client_id = self._config["tidal"]["client_id"]
-        client_secret = self._config["tidal"]["client_secret"]
+        client_id = self._config[self.EXT]["client_id"]
+        client_secret = self._config[self.EXT]["client_secret"]
 
         if (client_id and not client_secret) or (client_secret and not client_id):
             logger.warning(
