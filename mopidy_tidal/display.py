@@ -6,6 +6,7 @@ M_CIRCLE = u"\u24C2"
 F_CIRCLE = u"\u24BB"
 T_CIRCLE_NEGATIVE = u"\U0001F163"
 LOSSLESS_SQUARE = u"\U0001F1A9"
+DOWN_UP_PAIRED_ARROWS = u"\u21F5"
 DOWNWARDS_PAIRED_ARROWS = u"\u21CA"
 BLACK_DOWN_POINTING_TRIANGLE = u"\u25BC"
 WARNING_SIGN = u"\u26A0"
@@ -34,16 +35,20 @@ def master_title(s):
     return u"{1} {0}".format(s, M_CIRCLE)
 
 
-def lossless_title(s):
+def high_lossless(s):
+    return u"{1} {0}".format(s, LOSSLESS_SQUARE)
+
+
+def hi_res(s):
     return s
 
 
-def high_title(s):
+def low_320k(s):
+    return u"{1} {0}".format(s, DOWN_UP_PAIRED_ARROWS)
+
+
+def low_96k(s):
     return u"{1} {0}".format(s, DOWNWARDS_PAIRED_ARROWS)
-
-
-def low_title(s):
-    return u"{1} {0}".format(s, BLACK_DOWN_POINTING_TRIANGLE)
 
 
 def alert_item(s):
@@ -56,12 +61,14 @@ def strip_feat(s):
 
 def track_display_name(tidal_track):
     track_name = tidal_track.name
-    if tidal_track.audio_quality == Quality.master:
+    if tidal_track.audio_quality == Quality.hi_res_lossless:
         return master_title(track_name)
-    if tidal_track.audio_quality == Quality.lossless:
-        return lossless_title(track_name)
-    if tidal_track.audio_quality == Quality.high:
-        return high_title(track_name)
-    if tidal_track.audio_quality == Quality.low:
-        return low_title(track_name)
+    if tidal_track.audio_quality == Quality.high_lossless:
+        return high_lossless(track_name)
+    if tidal_track.audio_quality == Quality.hi_res:
+        return hi_res(track_name)
+    if tidal_track.audio_quality == Quality.low_320k:
+        return low_320k(track_name)
+    if tidal_track.audio_quality == Quality.low_96k:
+        return low_96k(track_name)
     return track_name

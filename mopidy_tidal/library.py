@@ -76,7 +76,7 @@ class TidalLibraryProvider(backend.LibraryProvider):
             "my_albums": session.user.favorites.albums,
             "my_playlists": session.user.favorites.playlists,
             "my_tracks": session.user.favorites.tracks,
-            "my_mixes": session.user.favorites.mixes_and_radio,
+            # "my_mixes": session.user.favorites.mixes_and_radio,
             "playlists": session.user.playlists,
         }
 

@@ -46,7 +46,6 @@ class TidalPlaylistsProvider(PlaylistsProvider):
         logger.debug(f"TidalPlaylistsProvider.as_list() ttl: {self.as_list.cache(self).ttl}")
         results = sorted_threaded(
             self.backend.session.user.playlist_and_favorite_playlists,
-            self.backend.session.user.favorites.mixes_and_radio,
         )
         return [
             *(m.ref.replace(name=tidal_item(m.ref.name))

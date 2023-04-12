@@ -1,103 +1,74 @@
 from __future__ import unicode_literals
 
-import json
 import logging
 import os
+import time
 
 from mopidy import backend
 from pykka import ThreadingActor
-from tidalapi import Config, Quality, Session
+from tidalapi import Config, Quality
 
 from mopidy_tidal import Extension, context, library, playback, playlists
+from mopidy_tidal.auth_http_server import start_oauth_deamon
+from mopidy_tidal.session import PersistentSession
 
 logger = logging.getLogger(__name__)
+
+OAUTH_JSON = "tidal.oauth.json"
 
 
 class TidalBackend(ThreadingActor, backend.Backend):
     EXT = Extension.ext_name
 
     def __init__(self, config, audio):
-        super(TidalBackend, self).__init__()
-        self._session = None
+        context.set_config(config[self.EXT])
+        super().__init__()
+        self.session = None
         self._config = config
-        context.set_config(self._config)
         self.playback = playback.TidalPlaybackProvider(audio=audio, backend=self)
         self.library = library.TidalLibraryProvider(backend=self)
         self.playlists = playlists.TidalPlaylistsProvider(
             backend=self,
-            playlist_cache_ttl=self._config[self.EXT]["playlist_cache_refresh_secs"]
+            playlist_cache_ttl=self.get_config("playlist_cache_refresh_secs")
         )
         self.uri_schemes = [self.EXT]
 
-    def oauth_login_new_session(self, oauth_file):
-        # create a new session
-        self._session.login_oauth_simple(function=logger.info)
-        if self._session.check_login():
-            # store current OAuth session
-            data = {}
-            data["token_type"] = {"data": self._session.token_type}
-            data["session_id"] = {"data": self._session.session_id}
-            data["access_token"] = {"data": self._session.access_token}
-            data["refresh_token"] = {"data": self._session.refresh_token}
-            with open(oauth_file, "w") as outfile:
-                json.dump(data, outfile)
+    def get_config(self, item):
+        return self._config[self.EXT].get(item)
+
+    def get_dir(self, folder):
+        method = getattr(Extension, f"get_{folder}_dir", None)
+        if not method:
+            raise ValueError(f"Not a valid folder: {folder}")
+        return method(self._config)
 
     def on_start(self):
-        quality = self._config[self.EXT]["quality"]
-        logger.info("Connecting to TIDAL.. Quality = %s" % quality)
+        client_id = self.get_config("client_id")
+        client_secret = self.get_config("client_secret")
+        quality = self.get_config("quality")
+        oauth_file_location = os.path.join(self.get_dir("data"), OAUTH_JSON)
         config = Config(quality=Quality(quality))
-        client_id = self._config[self.EXT]["client_id"]
-        client_secret = self._config[self.EXT]["client_secret"]
-
-        if (client_id and not client_secret) or (client_secret and not client_id):
-            logger.warning(
-                "Connecting to TIDAL.. always provide client_id and client_secret together"
-            )
-            logger.info(
-                "Connecting to TIDAL.. using default client id & client secret from python-tidal"
-            )
-
-        if client_id and client_secret:
-            logger.info(
-                "Connecting to TIDAL.. client id & client secret from config section are used"
-            )
+        if client_id:
             config.client_id = client_id
-            config.api_token = client_id
             config.client_secret = client_secret
-
-        if not client_id and not client_secret:
-            logger.info(
-                "Connecting to TIDAL.. using default client id & client secret from python-tidal"
-            )
-
-        self._session = Session(config)
-        # Always store tidal-oauth cache in mopidy core config data_dir
-        data_dir = Extension.get_data_dir(self._config)
-        oauth_file = os.path.join(data_dir, "tidal-oauth.json")
+        self.session = PersistentSession(config, authentication_local_storage=oauth_file_location)
+        logger.info("Connecting to TIDAL... Requested Quality = %s" % quality)
         try:
-            # attempt to reload existing session from file
-            with open(oauth_file) as f:
-                logger.info("Loading OAuth session from %s...", oauth_file)
-                data = json.load(f)
-                self._load_oauth_session(**data)
-        except Exception as e:
-            logger.info("Could not load OAuth session from %s: %s", oauth_file, e)
-
-        if not self._session.check_login():
-            logger.info("Creating new OAuth session...")
-            self.oauth_login_new_session(oauth_file)
-
-        if self._session.check_login():
+            self.session.load_oauth_session_from_file()
+        except FileNotFoundError:
+            login_web_port = self.get_config("login_web_port")
+            start_oauth_deamon(self.session, login_web_port)
+            logger.info(f"No authentication found. Please visit http://localhost:{login_web_port} to authenticate")
+            max_time = time.time() + 300
+            while time.time() < max_time:
+                if self.session.check_login():
+                    break
+                else:
+                    logger.info(f"Time left to complete authentication: ${int(max_time - time.time())}sec")
+                time.sleep(15)
+        if self.session.check_login():
             logger.info("TIDAL Login OK")
+            subscription = self.session.request.basic_request('GET', f'users/{self.session.user.id}/subscription').json()
+            logger.info("HighestSoundQuality: {highestSoundQuality}".format(**subscription))
         else:
             logger.info("TIDAL Login KO")
-
-    def _load_oauth_session(self, **data):
-        assert self._session, "No session loaded"
-        args = {
-            "token_type": data.get("token_type", {}).get("data"),
-            "access_token": data.get("access_token", {}).get("data"),
-            "refresh_token": data.get("refresh_token", {}).get("data"),
-        }
-
-        self._session.load_oauth_session(**args)
