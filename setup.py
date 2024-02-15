@@ -26,10 +26,10 @@ setup(
     include_package_data=True,
     install_requires=[
         "setuptools",
-        "cachetools >= 5.3.0"
+        "cachetools >= 5.3.0",
         "Mopidy >= 3.0",
         "Pykka >= 1.1",
-        "tidalapi >= 0.7.0",
+        "tidalapi @ git+https://github.com/quodrum-glas/python-tidal.git@quodrumglas-dev",
         "requests >= 2.0.0",
     ],
     entry_points={
