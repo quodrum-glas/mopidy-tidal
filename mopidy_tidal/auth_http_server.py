@@ -2,7 +2,7 @@ import threading
 from functools import partial
 from string import whitespace
 
-from mopidy_tidal.session import PersistentSession, NonLimitedInputDeviceLogin
+from mopidy_tidal.session import PersistentSession
 
 try:
     from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
@@ -36,8 +36,8 @@ INTERACTIVE_HTML_BODY = """
 </form>
 """
 
-def start_oauth_deamon(session, port):
-    handler = partial(HTTPHandler, session)
+def start_oauth_deamon(session, port, login_result):
+    handler = partial(HTTPHandler, session, login_result)
     daemon = threading.Thread(
         name="TidalOAuthLogin",
         target=HTTPServer(('', port), handler).serve_forever
@@ -48,16 +48,15 @@ def start_oauth_deamon(session, port):
 
 class HTTPHandler(BaseHTTPRequestHandler, object):
 
-    def __init__(self, session: PersistentSession, *args, **kwargs):
-        self.login_handler = LoginHandler(session)
+    def __init__(self, session: PersistentSession, login_result_holder, *args, **kwargs):
+        self.login_handler = LoginHandler(session, login_result_holder)
         super().__init__(*args, **kwargs)
 
     def do_GET(self):
-        self.login_handler.login1()
         self.send_response(200)
         self.end_headers()
-        interactive = INTERACTIVE_HTML_BODY if self.login_handler.login2 else ''
-        self.wfile.write(HTML_BODY(authurl=self.login_handler.login_url, interactive=interactive).encode())
+        interactive = INTERACTIVE_HTML_BODY if self.login_handler.is_pkce else ''
+        self.wfile.write(HTML_BODY(authurl=self.login_handler.get_login_url(), interactive=interactive).encode())
 
     def do_POST(self):
         content_length = int(self.headers.get("Content-Length"), 0)
@@ -72,7 +71,7 @@ class HTTPHandler(BaseHTTPRequestHandler, object):
             raise
         else:
             try:
-                self.login_handler.login2(code_url)
+                self.login_handler.set_login_result(code_url)
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"Success!\nCredentials auto-refresh is on.\nEnjoy your music!")
@@ -84,17 +83,30 @@ class HTTPHandler(BaseHTTPRequestHandler, object):
 
 
 class LoginHandler:
-    login_url = None
-    login1 = None
-    login2 = None
-    def __init__(self, session: PersistentSession):
-        if session.config.client_id:
-            response_handler = partial(self.__setattr__, 'login_url')
-            if session.config.client_secret:
-                self.login1 = partial(session.login_oauth_simple, response_handler)
-            else:
-                alt_login = NonLimitedInputDeviceLogin(session)
-                self.login1 = partial(alt_login.login_oauth_simple, response_handler)
-                self.login2 = alt_login.login_oauth_simple_auth_code
+    def __init__(self, session: PersistentSession, login_result_holder):
+        self._session = session
+        self._login_result_holder = login_result_holder
+        self.is_pkce = session.is_pkce
+
+    def _login_oauth(self):
+        login, future = self._session.login_oauth()
+        future.add_done_callback(lambda f: self.set_login_result(f.exception()))
+        return login.verification_uri_complete
+
+    def _login_pkce(self):
+        return self._session.pkce_login_url()
+
+    def get_login_url(self):
+        if self.is_pkce:
+            return self._login_pkce()
         else:
-            raise ValueError("At least client_id must be set")
+            return self._login_oauth()
+
+    def set_login_result(self, data):
+        if self.is_pkce:
+            try:
+                self._session.process_auth_token(self._session.pkce_get_auth_token(data))
+                data = None
+            except Exception as e:
+                data = e
+        self._login_result_holder.put(data)

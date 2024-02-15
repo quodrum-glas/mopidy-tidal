@@ -1,14 +1,44 @@
 from __future__ import unicode_literals
 
 import logging
+from pathlib import Path
 
+from cachetools import TTLCache, cachedmethod
 from mopidy import backend
+from mopidy_tidal.helpers import Throttle
 from mopidy_tidal.uri import URI
+
+from tidalapi.media import ManifestMimeType
 
 logger = logging.getLogger(__name__)
 
 
 class TidalPlaybackProvider(backend.PlaybackProvider):
+
+    __cache = TTLCache(maxsize=128, ttl=120)
+
+    @cachedmethod(lambda slf: slf.__cache)
+    @Throttle(calls=1, interval=2)
     def translate_uri(self, uri):
         logger.debug("TidalPlaybackProvider translate_uri: %s", uri)
-        return self.backend.session.track(URI.from_string(uri).track).get_url()
+        track = self.backend.session.track(URI.from_string(uri).track)
+        stream = track.get_stream()
+        manifest = stream.get_stream_manifest()
+        logger.info(f"MimeType:{stream.manifest_mime_type}")
+        logger.info(f"Starting playback of track:{track.full_name}, (quality:{stream.audio_quality}, "
+                    f"codec:{manifest.get_codecs()}, {stream.bit_depth}bit/{stream.sample_rate}Hz)")
+
+        if stream.manifest_mime_type == ManifestMimeType.MPD.value:
+            data = stream.get_manifest_data()
+            if data:
+                mpd_path = Path(
+                    self.backend.get_dir("cache"), "manifest.mpd"
+                )
+                with open(mpd_path, "w") as file:
+                    file.write(data)
+
+                return "file://{}".format(mpd_path)
+            else:
+                raise AttributeError("No MPD manifest available!")
+        elif stream.manifest_mime_type == ManifestMimeType.BTS.value:
+            return manifest.get_urls()

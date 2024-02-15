@@ -2,7 +2,7 @@ from __future__ import unicode_literals
 
 import logging
 import os
-import time
+from queue import Queue, Empty
 
 from mopidy import backend
 from pykka import ThreadingActor
@@ -14,7 +14,7 @@ from mopidy_tidal.session import PersistentSession
 
 logger = logging.getLogger(__name__)
 
-OAUTH_JSON = "tidal.oauth.json"
+OAUTH_JSON = "tidal.oauth.{}.json".format
 
 
 class TidalBackend(ThreadingActor, backend.Backend):
@@ -43,32 +43,45 @@ class TidalBackend(ThreadingActor, backend.Backend):
         return method(self._config)
 
     def on_start(self):
+        login_pkce = self.get_config("login_pkce") or True
         client_id = self.get_config("client_id")
         client_secret = self.get_config("client_secret")
         quality = self.get_config("quality")
-        oauth_file_location = os.path.join(self.get_dir("data"), OAUTH_JSON)
         config = Config(quality=Quality(quality))
         if client_id:
-            config.client_id = client_id
-            config.client_secret = client_secret
-        self.session = PersistentSession(config, authentication_local_storage=oauth_file_location)
+            if login_pkce:
+                config.client_id_pkce = client_id
+                config.client_secret_pkce = client_secret
+            else:
+                config.client_id = client_id
+                config.client_secret = client_secret
+        oauth_file_location = os.path.join(self.get_dir("data"), OAUTH_JSON(
+            client_id or config.client_id_pkce if login_pkce else config.client_id))
+        self.session = PersistentSession(config, login_pkce=login_pkce, authentication_local_storage=oauth_file_location)
         logger.info("Connecting to TIDAL... Requested Quality = %s" % quality)
         try:
             self.session.load_oauth_session_from_file()
         except FileNotFoundError:
-            login_web_port = self.get_config("login_web_port")
-            start_oauth_deamon(self.session, login_web_port)
-            logger.info(f"No authentication found. Please visit http://localhost:{login_web_port} to authenticate")
-            max_time = time.time() + 300
-            while time.time() < max_time:
-                if self.session.check_login():
-                    break
-                else:
-                    logger.info(f"Time left to complete authentication: ${int(max_time - time.time())}sec")
-                time.sleep(15)
+            try:
+                self.new_login()
+            except Exception as e:
+                logger.exception(e)
         if self.session.check_login():
             logger.info("TIDAL Login OK")
             subscription = self.session.request.basic_request('GET', f'users/{self.session.user.id}/subscription').json()
             logger.info("HighestSoundQuality: {highestSoundQuality}".format(**subscription))
         else:
             logger.info("TIDAL Login KO")
+
+
+    def new_login(self):
+        login_web_port = self.get_config("login_web_port")
+        login_result_holder = Queue(maxsize=1)
+        start_oauth_deamon(self.session, login_web_port, login_result_holder)
+        logger.info(f"No authentication found. Please visit http://localhost:{login_web_port} to authenticate")
+        try:
+            exception = login_result_holder.get(timeout=300)
+            if exception:
+                raise exception
+        except Empty:
+            raise TimeoutError("Login Timeout")

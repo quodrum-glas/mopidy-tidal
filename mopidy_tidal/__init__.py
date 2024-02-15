@@ -29,7 +29,8 @@ class Extension(ext.Extension):
 
     def get_config_schema(self):
         schema = super(Extension, self).get_config_schema()
-        schema["client_id"] = config.Secret()
+        schema["login_pkce"] = config.Boolean(optional=True)
+        schema["client_id"] = config.Secret(optional=True)
         schema["client_secret"] = config.Secret(optional=True)
         schema["quality"] = config.String(choices=[e.value for e in Quality])
         schema["playlist_cache_refresh_secs"] = config.Integer(

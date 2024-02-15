@@ -113,7 +113,7 @@ class Track(Model):
     def radio(self):
         return [
             Track.from_api(t)
-            for t in self.api.radio().items()
+            for t in self.api.get_track_radio().items()
             if isinstance(t, tdl.Track)
         ]
 
@@ -128,7 +128,7 @@ class Track(Model):
             date=str(self.api.album.year) if self.api.album.year else None,
             disc_no=self.api.volume_num,
             genre=self.api.audio_quality.value,
-            comment=self.api.name,
+            comment=' '.join(map(str, self.api.media_metadata_tags)),
         )
 
     @property
