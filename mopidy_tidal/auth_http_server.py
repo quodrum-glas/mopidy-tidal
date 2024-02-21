@@ -4,12 +4,8 @@ from string import whitespace
 
 from mopidy_tidal.session import PersistentSession
 
-try:
-    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
-    from urllib import unquote
-except ImportError:
-    from http.server import HTTPServer, BaseHTTPRequestHandler
-    from urllib.parse import unquote
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import unquote
 
 HTML_BODY = """<!DOCTYPE html>
 <html>
@@ -28,7 +24,7 @@ HTML_BODY = """<!DOCTYPE html>
 
 INTERACTIVE_HTML_BODY = """
 <p>...then, after login, copy the whole final URL of the page you ended up to.</p>
-<p>Probably a "not found" page, nevertheless we need the whole URL as is.</p>
+<p>Probably a "Not Found" ("Ooops!" ?) page, nevertheless we need the whole URL as is.</p>
 <form method="post">
   <label for="code">Paste here your final URL location:</label>
   <input type="url" id="code" name="code">
@@ -36,14 +32,16 @@ INTERACTIVE_HTML_BODY = """
 </form>
 """
 
-def start_oauth_deamon(session, port, login_result):
-    handler = partial(HTTPHandler, session, login_result)
+def start_oauth_deamon(session, port, login_result_holder):
+    handler = partial(HTTPHandler, session, login_result_holder)
+    http_server = HTTPServer(('', port), handler)
     daemon = threading.Thread(
         name="TidalOAuthLogin",
-        target=HTTPServer(('', port), handler).serve_forever
+        target=http_server.serve_forever
     )
-    daemon.daemon = True  # Set as a daemon so it will be killed once the main thread is dead.
+    daemon.daemon = True  # Set as a daemon, so it will be killed once the main thread is dead.
     daemon.start()
+    return http_server.shutdown
 
 
 class HTTPHandler(BaseHTTPRequestHandler, object):

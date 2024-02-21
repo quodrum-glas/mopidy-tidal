@@ -6,10 +6,21 @@ M_CIRCLE = u"\u24C2"
 F_CIRCLE = u"\u24BB"
 T_CIRCLE_NEGATIVE = u"\U0001F163"
 LOSSLESS_SQUARE = u"\U0001F1A9"
+HIRES_SQUARE = u"\U0001F1A8"
 DOWN_UP_PAIRED_ARROWS = u"\u21F5"
 DOWNWARDS_PAIRED_ARROWS = u"\u21CA"
 BLACK_DOWN_POINTING_TRIANGLE = u"\u25BC"
 WARNING_SIGN = u"\u26A0"
+
+META_TAGS = {
+    Quality.low_96k.value: DOWNWARDS_PAIRED_ARROWS,
+    Quality.low_320k.value: DOWN_UP_PAIRED_ARROWS,
+    Quality.high_lossless.value: None,
+    "MQA": M_CIRCLE,
+    Quality.hi_res.value: HIRES_SQUARE,
+    Quality.hi_res_lossless.value: HIRES_SQUARE,
+    "HIRES_LOSSLESS": HIRES_SQUARE,
+}
 
 FEAT_CHARS = "".join(
     v for k, v in vars().items()
@@ -60,15 +71,11 @@ def strip_feat(s):
 
 
 def track_display_name(tidal_track):
-    track_name = tidal_track.name
-    if tidal_track.audio_quality == Quality.hi_res_lossless:
-        return master_title(track_name)
-    if tidal_track.audio_quality == Quality.high_lossless:
-        return high_lossless(track_name)
-    if tidal_track.audio_quality == Quality.hi_res:
-        return hi_res(track_name)
-    if tidal_track.audio_quality == Quality.low_320k:
-        return low_320k(track_name)
-    if tidal_track.audio_quality == Quality.low_96k:
-        return low_96k(track_name)
-    return track_name
+    if tidal_track.media_metadata_tags:
+        tags = ' '.join(i for i in (META_TAGS.get(tag) for tag in tidal_track.media_metadata_tags) if i)
+        return u"{0} {1}".format(tags, tidal_track.name)
+    else:
+        tag = META_TAGS.get(tidal_track.audio_quality.value)
+        if tag:
+            return u"{0} {1}".format(tag, tidal_track.name)
+    return tidal_track.name
