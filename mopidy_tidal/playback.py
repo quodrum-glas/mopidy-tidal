@@ -18,15 +18,14 @@ class TidalPlaybackProvider(backend.PlaybackProvider):
     __cache = TTLCache(maxsize=128, ttl=120)
 
     @cachedmethod(lambda slf: slf.__cache)
-    @Throttle(calls=1, interval=2)
+    @Throttle(calls=2, interval=2)
     def translate_uri(self, uri):
         logger.debug("TidalPlaybackProvider translate_uri: %s", uri)
         track = self.backend.session.track(URI.from_string(uri).track)
         stream = track.get_stream()
         manifest = stream.get_stream_manifest()
-        logger.info(f"MimeType:{stream.manifest_mime_type}")
-        logger.info(f"Starting playback of track:{track.full_name}, (quality:{stream.audio_quality}, "
-                    f"codec:{manifest.get_codecs()}, {stream.bit_depth}bit/{stream.sample_rate}Hz)")
+        logger.info(f"{stream.manifest_mime_type} {stream.bit_depth}bit/{stream.sample_rate}Hz"
+                    f" {stream.audio_quality} {manifest.get_codecs()} : {track.full_name}")
 
         if stream.manifest_mime_type == ManifestMimeType.MPD.value:
             data = stream.get_manifest_data()

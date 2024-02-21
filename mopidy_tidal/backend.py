@@ -11,6 +11,7 @@ from tidalapi import Config, Quality
 from mopidy_tidal import Extension, context, library, playback, playlists
 from mopidy_tidal.auth_http_server import start_oauth_deamon
 from mopidy_tidal.session import PersistentSession
+from mopidy_tidal.helpers import get_ip
 
 logger = logging.getLogger(__name__)
 
@@ -49,18 +50,18 @@ class TidalBackend(ThreadingActor, backend.Backend):
         quality = self.get_config("quality")
         config = Config(quality=Quality(quality))
         if client_id:
+            config.client_id = client_id
+            config.client_secret = client_secret
             if login_pkce:
                 config.client_id_pkce = client_id
                 config.client_secret_pkce = client_secret
-            else:
-                config.client_id = client_id
-                config.client_secret = client_secret
         oauth_file_location = os.path.join(self.get_dir("data"), OAUTH_JSON(
             client_id or config.client_id_pkce if login_pkce else config.client_id))
         self.session = PersistentSession(config, login_pkce=login_pkce, authentication_local_storage=oauth_file_location)
         logger.info("Connecting to TIDAL... Requested Quality = %s" % quality)
         try:
             self.session.load_oauth_session_from_file()
+            logger.info(f"Session loaded from {oauth_file_location}")
         except FileNotFoundError:
             try:
                 self.new_login()
@@ -77,11 +78,12 @@ class TidalBackend(ThreadingActor, backend.Backend):
     def new_login(self):
         login_web_port = self.get_config("login_web_port")
         login_result_holder = Queue(maxsize=1)
-        start_oauth_deamon(self.session, login_web_port, login_result_holder)
-        logger.info(f"No authentication found. Please visit http://localhost:{login_web_port} to authenticate")
+        terminate = start_oauth_deamon(self.session, login_web_port, login_result_holder)
+        logger.info(f"No saved session found. Please visit http://{get_ip()}:{login_web_port} to authenticate")
         try:
             exception = login_result_holder.get(timeout=300)
             if exception:
                 raise exception
         except Empty:
             raise TimeoutError("Login Timeout")
+        terminate()

@@ -1,4 +1,5 @@
 import datetime
+import socket
 from collections import deque
 from functools import wraps
 from time import time
@@ -49,3 +50,16 @@ def try_or_none(call, *args, **kwargs):
 
 def return_none(*args, **kwargs):
     return None
+
+def get_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0)
+    ip = '127.0.0.1'
+    try:
+        s.connect(('10.254.254.254', 1))
+        ip = s.getsockname()[0]
+    except Exception:
+        pass
+    finally:
+        s.close()
+    return ip
