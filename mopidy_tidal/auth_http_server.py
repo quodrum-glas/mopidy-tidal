@@ -5,7 +5,7 @@ from string import whitespace
 from mopidy_tidal.session import PersistentSession
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 
 HTML_BODY = """<!DOCTYPE html>
 <html>
@@ -51,10 +51,12 @@ class HTTPHandler(BaseHTTPRequestHandler, object):
         super().__init__(*args, **kwargs)
 
     def do_GET(self):
+        url = urlparse(self.path)
         self.send_response(200)
         self.end_headers()
-        interactive = INTERACTIVE_HTML_BODY if self.login_handler.is_pkce else ''
-        self.wfile.write(HTML_BODY(authurl=self.login_handler.get_login_url(), interactive=interactive).encode())
+        if url.path == '/' and url.query == '' and url.params == '':
+            interactive = INTERACTIVE_HTML_BODY if self.login_handler.is_pkce else ''
+            self.wfile.write(HTML_BODY(authurl=self.login_handler.get_login_url(), interactive=interactive).encode())
 
     def do_POST(self):
         content_length = int(self.headers.get("Content-Length"), 0)

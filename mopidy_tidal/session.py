@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+from os.path import basename
 
 from tidalapi import Session
 
@@ -20,7 +21,7 @@ class PersistentSession(Session):
             data = json.load(f)
         data["expiry_time"] = datetime.datetime.fromisoformat(data["expiry_time"])
         self.load_oauth_session(**data)
-        logger.info(f"Session Loaded. Expires at {self.expiry_time.isoformat()}")
+        logger.info(f"Session loaded from {basename(self._authentication_local_storage)} - Expires at {self.expiry_time.isoformat()}")
 
     def save_oauth_session_to_file(self):
         with open(self._authentication_local_storage, 'w') as f:
@@ -30,7 +31,7 @@ class PersistentSession(Session):
                 "refresh_token": self.refresh_token,
                 "expiry_time": self.expiry_time.isoformat(),
             }, f)
-        logger.info(f"Session Saved. Expires at {self.expiry_time.isoformat()}")
+        logger.info(f"Session saved to {basename(self._authentication_local_storage)} - Expires at {self.expiry_time.isoformat()}")
 
     def token_refresh(self, *args, **kwargs):
         logger.info(f"Authentication expired at {self.expiry_time.isoformat()} ...Refreshing")
