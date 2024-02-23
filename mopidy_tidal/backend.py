@@ -16,6 +16,7 @@ from mopidy_tidal.helpers import get_ip
 logger = logging.getLogger(__name__)
 
 OAUTH_JSON = "tidal.oauth.{}.json".format
+MAX_LOGIN_WAIT_MINS = 5
 
 
 class TidalBackend(ThreadingActor, backend.Backend):
@@ -44,44 +45,58 @@ class TidalBackend(ThreadingActor, backend.Backend):
         return method(self._config)
 
     def on_start(self):
-        login_pkce = self.get_config("login_pkce") or True
         client_id = self.get_config("client_id")
         client_secret = self.get_config("client_secret")
-        quality = self.get_config("quality")
-        config = Config(quality=Quality(quality))
+        config = Config(quality=Quality(self.get_config("quality")))
+        is_hires_quality = config.quality in [Quality.hi_res.value, Quality.hi_res_lossless.value]
+        login_pkce = is_hires_quality or self.get_config("login_pkce")
         if client_id:
-            config.client_id = client_id
-            config.client_secret = client_secret
             if login_pkce:
                 config.client_id_pkce = client_id
                 config.client_secret_pkce = client_secret
-        oauth_file_location = os.path.join(self.get_dir("data"), OAUTH_JSON(
-            client_id or config.client_id_pkce if login_pkce else config.client_id))
+            else:
+                config.client_id = client_id
+                config.client_secret = client_secret
+        client_id_in_use = config.client_id_pkce if login_pkce else config.client_id
+        oauth_file_location = os.path.join(self.get_dir("data"), OAUTH_JSON(client_id_in_use))
         self.session = PersistentSession(config, login_pkce=login_pkce, authentication_local_storage=oauth_file_location)
-        logger.info("Connecting to TIDAL... Requested Quality = %s" % quality)
+        logger.info(f"{client_id_in_use} connecting to TIDAL. Requested Quality: {config.quality}")
+        if is_hires_quality:
+            logger.info("Enabling TIDAL HI-RES")
+            self.session.client_enable_hires()
+        self.connect()
+
+    def connect(self):
+        success = False
         try:
             self.session.load_oauth_session_from_file()
-            logger.info(f"Session loaded from {oauth_file_location}")
-        except FileNotFoundError:
+            if self.session.check_login():
+                logger.info("TIDAL Login OK")
+                success = True
+            else:
+                logger.info("TIDAL Login KO")
+                raise PermissionError("Saved session failed to authenticate")
+        except (FileNotFoundError, PermissionError, ) as e:
+            logger.info(e)
             try:
                 self.new_login()
+                success = True
+            except TimeoutError as e:
+                logger.error(e)
             except Exception as e:
                 logger.exception(e)
-        if self.session.check_login():
-            logger.info("TIDAL Login OK")
-            subscription = self.session.request.basic_request('GET', f'users/{self.session.user.id}/subscription').json()
-            logger.info("HighestSoundQuality: {highestSoundQuality}".format(**subscription))
-        else:
-            logger.info("TIDAL Login KO")
-
+        if not success:
+            raise RuntimeError("Failed connection to TIDAL Service")
+        subscription = self.session.request.basic_request('GET', f'users/{self.session.user.id}/subscription').json()
+        logger.info("Connected to TIDAL. HighestSoundQuality: {highestSoundQuality}".format(**subscription))
 
     def new_login(self):
         login_web_port = self.get_config("login_web_port")
         login_result_holder = Queue(maxsize=1)
         terminate = start_oauth_deamon(self.session, login_web_port, login_result_holder)
-        logger.info(f"No saved session found. Please visit http://{get_ip()}:{login_web_port} to authenticate")
+        logger.info(f"Please visit http://{get_ip()}:{login_web_port} to authenticate")
         try:
-            exception = login_result_holder.get(timeout=300)
+            exception = login_result_holder.get(timeout=MAX_LOGIN_WAIT_MINS * 60)
             if exception:
                 raise exception
         except Empty:
