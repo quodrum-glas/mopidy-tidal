@@ -60,7 +60,7 @@ class TidalBackend(ThreadingActor, backend.Backend):
         client_id_in_use = config.client_id_pkce if login_pkce else config.client_id
         oauth_file_location = os.path.join(self.get_dir("data"), OAUTH_JSON(client_id_in_use))
         self.session = PersistentSession(config, login_pkce=login_pkce, authentication_local_storage=oauth_file_location)
-        logger.info(f"{client_id_in_use} connecting to TIDAL. Requested Quality: {config.quality}")
+        logger.info("%s connecting to TIDAL. Requested Quality: %s", client_id_in_use, config.quality)
         if is_hires_quality:
             logger.info("Enabling TIDAL HI-RES")
             self.session.client_enable_hires()
@@ -88,13 +88,13 @@ class TidalBackend(ThreadingActor, backend.Backend):
         if not success:
             raise RuntimeError("Failed connection to TIDAL Service")
         subscription = self.session.request.basic_request('GET', f'users/{self.session.user.id}/subscription').json()
-        logger.info("Connected to TIDAL. HighestSoundQuality: {highestSoundQuality}".format(**subscription))
+        logger.info("Connected to TIDAL. HighestSoundQuality: %s", subscription.get("highestSoundQuality", "UNKNOWN"))
 
     def new_login(self):
         login_web_port = self.get_config("login_web_port")
         login_result_holder = Queue(maxsize=1)
         terminate = start_oauth_deamon(self.session, login_web_port, login_result_holder)
-        logger.info(f"Please visit http://{get_ip()}:{login_web_port} to authenticate")
+        logger.info("Please visit http://%s:%i to authenticate", get_ip(), login_web_port)
         try:
             exception = login_result_holder.get(timeout=MAX_LOGIN_WAIT_MINS * 60)
             if exception:

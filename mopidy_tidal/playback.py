@@ -24,8 +24,8 @@ class TidalPlaybackProvider(backend.PlaybackProvider):
         track = self.backend.session.track(URI.from_string(uri).track)
         stream = track.get_stream()
         manifest = stream.get_stream_manifest()
-        logger.info(f"{stream.manifest_mime_type} {stream.bit_depth}bit/{stream.sample_rate}Hz"
-                    f" {stream.audio_quality} {manifest.get_codecs()} : {track.full_name}")
+        logger.info("%s %ibit/%iHz %s %s : %s", stream.manifest_mime_type, stream.bit_depth, stream.sample_rate,
+                    stream.audio_quality, manifest.get_codecs(), track.full_name)
 
         if stream.manifest_mime_type == ManifestMimeType.MPD.value:
             data = stream.get_manifest_data()
