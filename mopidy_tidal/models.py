@@ -406,12 +406,12 @@ class PageItem(Model):
         try:
             uri_type = URIType[item.type]
         except KeyError:
-            logger.error(f"Future return type unknown: {item.type!s}")
+            logger.error("Future return type unknown: %s", item.type)
             return None
         try:
             ref_type = cls.URI_REF_MAP[uri_type]
         except KeyError:
-            logger.error(f"Future return type not supported: {uri_type!s}")
+            logger.error("Future return type not supported: %s", uri_type)
             return None
         uri = URI(uri_type, item.artifact_id)
         ref = mm.Ref(type=ref_type, uri=str(uri), name=feat_item(item.header))

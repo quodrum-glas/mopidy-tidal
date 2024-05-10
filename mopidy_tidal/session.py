@@ -21,7 +21,7 @@ class PersistentSession(Session):
             data = json.load(f)
         data["expiry_time"] = datetime.datetime.fromisoformat(data["expiry_time"])
         self.load_oauth_session(**data)
-        logger.info(f"Session loaded from {basename(self._authentication_local_storage)} - Expires at {self.expiry_time.isoformat()}")
+        logger.info("Session loaded from %s - Expires at %s", basename(self._authentication_local_storage), self.expiry_time.isoformat())
 
     def save_oauth_session_to_file(self):
         with open(self._authentication_local_storage, 'w') as f:
@@ -31,16 +31,16 @@ class PersistentSession(Session):
                 "refresh_token": self.refresh_token,
                 "expiry_time": self.expiry_time.isoformat(),
             }, f)
-        logger.info(f"Session saved to {basename(self._authentication_local_storage)} - Expires at {self.expiry_time.isoformat()}")
+        logger.info("Session saved to %s - Expires at %s", basename(self._authentication_local_storage), self.expiry_time.isoformat())
 
     def token_refresh(self, *args, **kwargs):
-        logger.info(f"Authentication expired at {self.expiry_time.isoformat()} ...Refreshing")
+        logger.info("Authentication expired at %s ...Refreshing", self.expiry_time.isoformat())
         refreshed = super().token_refresh(*args, **kwargs)
         if refreshed:
-            logger.info(f"Authentication renewed until {self.expiry_time.isoformat()}")
+            logger.info("Authentication renewed until %s", self.expiry_time.isoformat())
             self.save_oauth_session_to_file()
         else:
-            logger.info(f"Authentication failed to renew.")
+            logger.info("Authentication failed to renew")
         return refreshed
 
 

@@ -43,7 +43,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
 
         .. versionadded:: 1.0
         """
-        logger.debug(f"TidalPlaylistsProvider.as_list() ttl: {self.as_list.cache(self).ttl}")
+        logger.debug("TidalPlaylistsProvider.as_list() ttl: %s", self.as_list.cache(self).ttl)
         results = sorted_threaded(
             self.backend.session.user.playlist_and_favorite_playlists,
         )
@@ -68,7 +68,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
 
         .. versionadded:: 1.0
         """
-        logger.debug(f"TidalPlaylistsProvider.get_items({uri})")
+        logger.debug("TidalPlaylistsProvider.get_items(%s)", uri)
         injections = {p.uri: p for p in self.INJECTED_PLAYLISTS.values()}
         if uri in injections:
             return [
@@ -145,7 +145,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
 
         *MUST be implemented by subclass.*
         """
-        logger.error("NotImplemented: TidalPlaylistsProvider.refresh(%s, %s)", (args, kwargs))
+        logger.error("NotImplemented: TidalPlaylistsProvider.refresh(%s, %s)", args, kwargs)
 
     def save(self, playlist: Playlist) -> Optional[Playlist]:
         """
@@ -164,7 +164,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
         """
         old_playlist = self.lookup.cache.get(hash(playlist.uri))
         if old_playlist:
-            logger.debug(f"TidalPlaylistsProvider.save: existing {playlist.uri}, {playlist.name}, {len(playlist.tracks)}")
+            logger.debug("TidalPlaylistsProvider.save: existing %s, %s, %i", playlist.uri, playlist.name, len(playlist.tracks))
             new_tracks = set(t.uri for t in playlist.tracks)
             old_tracks = set(t.uri for t in old_playlist.tracks)
             if playlist.uri == f"{URI(URIType.PLAYLIST, 'radio')}":
@@ -172,15 +172,15 @@ class TidalPlaylistsProvider(PlaylistsProvider):
             self._save_tracks(new_tracks - old_tracks, playlist)
             self._delete_tracks(old_tracks - new_tracks, old_playlist)
         elif playlist.uri == self.NEW_PLAYLIST_URI:
-            logger.debug(f"TidalPlaylistsProvider.save: new {playlist.uri}, {playlist.name}, {len(playlist.tracks)}")
+            logger.debug("TidalPlaylistsProvider.save: new %s, %s, %i", playlist.uri, playlist.name, len(playlist.tracks))
             self._create_new_playlist(playlist)
         else:
-            logger.error(f"NotImplemented: TidalPlaylistsProvider.save({playlist})")
+            logger.error("NotImplemented: TidalPlaylistsProvider.save(%s)", playlist)
         return playlist
 
     def _create_radio(self, tracks, playlist):
         track = lookup_uri(self.backend, next(iter(tracks), playlist.tracks[-1].uri))
-        logger.debug(f"Getting radio for track: {track.name}")
+        logger.debug("Getting radio for track: %s", track.name)
         playlist = playlist.replace(
             name=f"radio: {track.name}",
             tracks=[t.full for t in track.radio()],
@@ -189,10 +189,10 @@ class TidalPlaylistsProvider(PlaylistsProvider):
         return playlist
 
     def _save_tracks(self, tracks, playlist):
-        logger.error(f"NotImplemented: TidalPlaylistsProvider._save_tracks({tracks}, {playlist.uri}")
+        logger.error("NotImplemented: TidalPlaylistsProvider._save_tracks(%s, %s)", tracks, playlist.uri)
 
     def _delete_tracks(self, tracks, playlist):
-        logger.error(f"NotImplemented: TidalPlaylistsProvider._delete_tracks({tracks}, {playlist.uri}")
+        logger.error("NotImplemented: TidalPlaylistsProvider._delete_tracks(%s, %s)", tracks, playlist.uri)
 
     def _create_new_playlist(self, playlist):
-        logger.error(f"NotImplemented: TidalPlaylistsProvider._create_new_playlist({playlist.tracks}, {playlist.name})")
+        logger.error("NotImplemented: TidalPlaylistsProvider._create_new_playlist(%s, %s)", playlist.tracks, playlist.name)

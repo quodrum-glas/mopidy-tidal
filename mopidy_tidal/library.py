@@ -19,7 +19,7 @@ class TidalLibraryProvider(backend.LibraryProvider):
     def get_distinct(self, field, query=None):
         from mopidy_tidal.search import tidal_search
 
-        logger.info(f"Browsing distinct {field!s} with query {query!r}")
+        logger.info("Browsing distinct %s with query %r", field, query)
         session = self.backend.session
 
         if not query:  # library root
@@ -55,11 +55,11 @@ class TidalLibraryProvider(backend.LibraryProvider):
                 ]
             pass
 
-        logger.warning(f"Browse distinct failed for: {field}")
+        logger.warning("Browse distinct failed for: %s", field)
         return []
 
     def browse(self, uri):
-        logger.debug(f"TidalLibraryProvider.browse {uri}")
+        logger.debug("TidalLibraryProvider.browse %s", uri)
         uri = URI.from_string(uri)
         if not uri:
             return []
@@ -117,7 +117,7 @@ class TidalLibraryProvider(backend.LibraryProvider):
         return images
 
     def lookup(self, uris):
-        logger.debug(f"TidalLibraryProvider.lookup({uris!r})")
+        logger.debug("TidalLibraryProvider.lookup(%r)", uris)
         if isinstance(uris, str) or not hasattr(uris, "__iter__"):
             uris = [uris]
         return [
