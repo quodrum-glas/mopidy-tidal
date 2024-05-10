@@ -113,7 +113,7 @@ class Track(Model):
     def radio(self):
         return [
             Track.from_api(t)
-            for t in self.api.get_track_radio().items()
+            for t in self.api.get_track_radio()
             if isinstance(t, tdl.Track)
         ]
 
