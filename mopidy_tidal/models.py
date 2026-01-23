@@ -117,6 +117,13 @@ class Track(Model):
             if isinstance(t, tdl.Track)
         ]
 
+    def mix(self):
+        return [
+            Track.from_api(t)
+            for t in self.api.get_radio_mix()
+            if isinstance(t, tdl.Track)
+        ]
+
     def build(self):
         return mm.Track(
             uri=self.uri,
