@@ -1,11 +1,11 @@
 from __future__ import unicode_literals
 
 import logging
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 from cachetools import cached, TTLCache, cachedmethod
 from mopidy.backend import PlaylistsProvider
-from mopidy.models import Playlist, Ref
+from mopidy.models import Playlist, Ref, Track
 
 from mopidy_tidal.display import tidal_item, alert_item
 from mopidy_tidal.models import lookup_uri, model_factory_map
@@ -23,7 +23,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
             name=name,
             tracks=[],
             last_modified=0
-        ) for name in ["radio"]
+        ) for name in ["radio", "mix"]
     }
 
     def __init__(self, *args, playlist_cache_ttl, **kwargs):
@@ -167,8 +167,8 @@ class TidalPlaylistsProvider(PlaylistsProvider):
             logger.debug("TidalPlaylistsProvider.save: existing %s, %s, %i", playlist.uri, playlist.name, len(playlist.tracks))
             new_tracks = set(t.uri for t in playlist.tracks)
             old_tracks = set(t.uri for t in old_playlist.tracks)
-            if playlist.uri == f"{URI(URIType.PLAYLIST, 'radio')}":
-                return self._create_radio(new_tracks - old_tracks, playlist)
+            if URI.from_string(playlist.uri).playlist in ["radio", "mix"]:
+                return self._create_track_playlist(new_tracks - old_tracks, playlist)
             self._save_tracks(new_tracks - old_tracks, playlist)
             self._delete_tracks(old_tracks - new_tracks, old_playlist)
         elif playlist.uri == self.NEW_PLAYLIST_URI:
@@ -178,14 +178,15 @@ class TidalPlaylistsProvider(PlaylistsProvider):
             logger.error("NotImplemented: TidalPlaylistsProvider.save(%s)", playlist)
         return playlist
 
-    def _create_radio(self, tracks, playlist):
+    def _create_track_playlist(self, tracks: Iterable[Track], playlist: Playlist) -> Playlist:
         track = lookup_uri(self.backend, next(iter(tracks), playlist.tracks[-1].uri))
-        logger.debug("Getting radio for track: %s", track.name)
+        method = URI.from_string(playlist.uri).playlist
+        logger.debug(f"Getting {method} for track: %s", track.name)
         playlist = playlist.replace(
-            name=f"radio: {track.name}",
-            tracks=[t.full for t in track.radio()],
+            name=f"{method}: {track.name}",
+            tracks=[t.full for t in getattr(track, method, lambda: [])()],
         )
-        self.INJECTED_PLAYLISTS["radio"] = playlist
+        self.INJECTED_PLAYLISTS[method] = playlist
         return playlist
 
     def _save_tracks(self, tracks, playlist):
