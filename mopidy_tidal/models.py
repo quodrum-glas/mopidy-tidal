@@ -11,13 +11,16 @@ __all__ = (
 )
 
 import logging
+from typing import Type, Iterator
 
 import mopidy.models as mm
 import tidalapi as tdl
 
+from tidalapi.exceptions import MetadataNotAvailable, ObjectNotFound
+
 from mopidy_tidal.cache import cache_by_uri, cached_by_uri, cached_items, cache_future, cached_future
 from mopidy_tidal.display import track_display_name, feat_item
-from mopidy_tidal.helpers import to_timestamp, return_none
+from mopidy_tidal.helpers import to_timestamp, return_none, Catch
 from mopidy_tidal.uri import URI, URIType
 from mopidy_tidal.workers import paginated
 
@@ -28,12 +31,13 @@ logger = logging.getLogger(__name__)
 
 
 class Model:
+    _mopidy_model = None
+
     def __init__(self, *, ref, api, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
         self.ref = ref
         self.api = api
-        self._full = None
 
     @classmethod
     def from_api(cls, api):
@@ -52,27 +56,43 @@ class Model:
         return self.ref.name
 
     @property
-    def full(self):
-        if self._full is None:
-            self._full = self.build()
-        return self._full
+    def model(self):
+        if self._mopidy_model is None:
+            self._mopidy_model = self()
+        return self._mopidy_model
 
     @property
     def last_modified(self):
         return to_timestamp("today")
 
-    def build(self):
-        raise NotImplementedError
-
-    def items(self):
-        raise NotImplementedError
-
-    def tracks(self):
-        raise NotImplementedError
-
     @property
     def images(self):
         raise NotImplementedError
+
+    @property
+    def tracks(self):
+        return [t for t in self if isinstance(t, Track)]
+
+    def __iter__(self):
+        yield self
+
+    def __call__(self):
+        raise TypeError(f"{self.__class__.__name__} object is not buildable")
+
+
+class Collection(Model):
+    _iter_items = iter(())
+
+    @classmethod
+    def from_iterable(cls, iterable, item_type=None):
+        raise NotImplementedError
+
+    @property
+    def items(self) -> Iterator["Model"]:
+        raise NotImplementedError
+
+    def __iter__(self):
+        yield from self.items
 
 
 class Track(Model):
@@ -82,7 +102,7 @@ class Track(Model):
     @classmethod
     @cache_by_uri
     def from_api(cls, track: tdl.Track):
-        uri = URI(URIType.TRACK, track.id)
+        uri = URI(URIType.TRACK, str(track.id))
         return cls(
             ref=mm.Ref.track(uri=str(uri), name=track_display_name(track)),
             api=track,
@@ -104,12 +124,7 @@ class Track(Model):
             album=Album.from_api(track.album) if track.album else None,
         )
 
-    def items(self):
-        raise AttributeError
-
-    def tracks(self):
-        return [self]
-
+    @Catch(MetadataNotAvailable, ObjectNotFound, default=[])
     def radio(self):
         return [
             Track.from_api(t)
@@ -117,25 +132,26 @@ class Track(Model):
             if isinstance(t, tdl.Track)
         ]
 
+    @Catch(MetadataNotAvailable, ObjectNotFound, default=[])
     def mix(self):
         return [
             Track.from_api(t)
-            for t in self.api.get_radio_mix()
+            for t in self.api.get_radio_mix().items()
             if isinstance(t, tdl.Track)
         ]
 
-    def build(self):
+    def __call__(self):
         return mm.Track(
             uri=self.uri,
             name=self.name,
             track_no=self.api.track_num,
-            artists=[artist.full for artist in self.artists],
-            album=self.album.full if self.album else None,
+            artists=[artist.model for artist in self.artists],
+            album=self.album.model if self.album else None,
             length=self.api.duration * 1000,
             date=str(self.api.album.year) if self.api.album.year else None,
             disc_no=self.api.volume_num,
-            genre=self.api.audio_quality.value,
-            comment=' '.join(map(str, self.api.media_metadata_tags)),
+            genre=self.api.audio_quality,
+            comment=" ".join(map(str, self.api.media_metadata_tags)) if self.api.media_metadata_tags else "",
         )
 
     @property
@@ -146,7 +162,7 @@ class Track(Model):
         return images
 
 
-class Album(Model):
+class Album(Collection):
     artists = []
 
     @classmethod
@@ -170,24 +186,33 @@ class Album(Model):
             artists=[Artist.from_api(artist) for artist in album.artists],
         )
 
-    def build(self):
+    def __call__(self):
         return mm.Album(
             uri=self.uri,
             name=self.name,
-            artists=[artist.full for artist in self.artists],
+            artists=[artist.model for artist in self.artists],
             num_tracks=self.api.num_tracks,
             num_discs=self.api.num_volumes,
             date=str(self.api.year) if self.api.year else None,
         )
 
-    def items(self):
-        return [
-            Future.from_api(self.api.page, ref_type=mm.Ref.DIRECTORY, title=f"Page: {self.name}"),
-            *self.tracks()
-        ]
+    @property
+    def items(self) -> Iterator[Model]:
+        yield Future.from_api(self.page, ref_type=mm.Ref.DIRECTORY, title=f"Page: {self.name}")
+        yield Future.from_api(self.similar, ref_type=mm.Ref.DIRECTORY, title=f"Similar: {self.name}")
+        yield from self.tracks
 
+    @property
+    @cached_items
     def tracks(self):
         return [Track.from_api(t) for t in self.api.tracks()]
+
+    def page(self) -> "Page":
+        return Page.from_api(self.api.page())
+    
+    @Catch(MetadataNotAvailable, ObjectNotFound, default=[])
+    def similar(self) -> "ItemList":
+        return ItemList.from_list(self.api.similar(), item_type=Album)
 
     @property
     def images(self):
@@ -195,7 +220,7 @@ class Album(Model):
         return [mm.Image(uri=image_uri, width=IMAGE_SIZE, height=IMAGE_SIZE)]
 
 
-class Artist(Model):
+class Artist(Collection):
     @classmethod
     def from_api(cls, artist: tdl.Artist):
         uri = URI(URIType.ARTIST, artist.id)
@@ -215,23 +240,39 @@ class Artist(Model):
             api=artist,
         )
 
-    def build(self):
+    def __call__(self):
         return mm.Artist(
             uri=self.uri,
             name=self.name,
             # sortname=self.api.name,
         )
 
-    def items(self):
-        return [
-            Future.from_api(self.api.page, ref_type=mm.Ref.DIRECTORY, title=f"Page: {self.name}"),
-            Future.from_api(self.api.get_radio, ref_type=mm.Ref.PLAYLIST, title=f"Radio: {self.name}"),
-            *self.tracks(),
-            *(Album.from_api(album) for album in self.api.get_albums()),
-        ]
+    @property
+    def items(self) -> Iterator[Model]:
+        yield Future.from_api(self.page, ref_type=mm.Ref.DIRECTORY, title=f"Page: {self.name}")
+        yield Future.from_api(self.similar, ref_type=mm.Ref.DIRECTORY, title=f"Similar: {self.name}")
+        yield Future.from_api(self.radio, ref_type=mm.Ref.PLAYLIST, title=f"Radio: {self.name}")
+        yield from self.top_tracks(20)
+        yield from self.albums()
 
-    def tracks(self, limit=10):
+    def page(self) -> "Page":
+        return Page.from_api(self.api.page())
+
+    @Catch(MetadataNotAvailable, ObjectNotFound, default=[])
+    def similar(self) -> "ItemList":
+        return ItemList.from_list(self.api.get_similar(), item_type=Artist)
+
+    @Catch(MetadataNotAvailable, ObjectNotFound, default=[])
+    def radio(self) -> "TrackList":
+        return TrackList.from_list(self.api.get_radio())
+
+    @cached_items
+    def top_tracks(self, limit=10):
         return [Track.from_api(track) for track in self.api.get_top_tracks(limit=limit)]
+
+    @cached_items
+    def albums(self):
+        return [Album.from_api(album) for album in self.api.get_albums()]
 
     @property
     def images(self):
@@ -239,7 +280,7 @@ class Artist(Model):
         return [mm.Image(uri=image_uri, width=IMAGE_SIZE, height=IMAGE_SIZE)]
 
 
-class Playlist(Model):
+class Playlist(Collection):
     @classmethod
     def from_api(cls, playlist: tdl.Playlist):
         uri = URI(URIType.PLAYLIST, playlist.id)
@@ -263,25 +304,25 @@ class Playlist(Model):
     def last_modified(self):
         return to_timestamp(self.api.last_updated)
 
-    def build(self):
+    def __call__(self):
         return mm.Playlist(
             uri=self.uri,
             name=self.name,
-            tracks=[t.full for t in self.items()],
+            tracks=[t.model for t in self],
             last_modified=self.last_modified,
         )
 
-    def items(self):
-        return self.tracks()
-
     @cached_items
-    def tracks(self):
+    def _api_items(self):
         return [
-            Track.from_api(item)
+            model_factory(item)
             for page in paginated(self.api.tracks, total=self.api.num_tracks)
             for item in page
-            if isinstance(item, tdl.Track)
         ]
+
+    @property
+    def items(self):
+        yield from self._api_items()
 
     @property
     def images(self):
@@ -290,18 +331,18 @@ class Playlist(Model):
 
 
 class PlaylistAsAlbum(Playlist):
-    def build(self):
+    def __call__(self):
         return mm.Album(
             uri=self.uri,
             name=self.name,
-            artists=[Artist.from_api(artist).full for artist in self.api.promoted_artists or []],
+            artists=[Artist.from_api(artist).model for artist in self.api.promoted_artists or []],
             num_tracks=self.api.num_tracks,
             num_discs=1,
             date=str(self.api.created.year) if self.api.created else None,
         )
 
 
-class Mix(Model):
+class Mix(Collection):
     @classmethod
     def from_api(cls, mix: tdl.Mix):
         uri = URI(URIType.MIX, mix.id)
@@ -323,32 +364,33 @@ class Mix(Model):
 
     @property
     def last_modified(self):
-        return to_timestamp(self.api.updated)
+        return to_timestamp(getattr(self.api, "updated", "today"))
 
-    def build(self):
+    def __call__(self):
         return mm.Playlist(
             uri=self.uri,
             name=self.name,
-            tracks=[t.full for t in self.items()],
+            tracks=[t.model for t in self],
             last_modified=self.last_modified,
         )
 
-    def items(self):
-        return self.tracks()
-
-    def tracks(self):
+    @cached_items
+    def _api_items(self):
         return [
-            Track.from_api(item)
+            model_factory(item)
             for item in self.api.items()
-            if isinstance(item, tdl.Track)
         ]
+
+    @property
+    def items(self):
+        yield from self._api_items()
 
     @property
     def images(self):
         return None
 
 
-class Page(Model):
+class Page(Collection):
     api_path = None
 
     @classmethod
@@ -372,17 +414,8 @@ class Page(Model):
         )
 
     @property
-    def last_modified(self):
-        return to_timestamp("today")
-
-    def build(self):
-        return self.ref
-
     def items(self):
-        return list(model_factory_map(self.api))
-
-    def tracks(self):
-        raise AttributeError
+        yield from model_factory_map(self.api)
 
     @property
     def images(self):
@@ -424,37 +457,46 @@ class PageItem(Model):
         ref = mm.Ref(type=ref_type, uri=str(uri), name=feat_item(item.header))
         return cls(ref=ref, api=item)
 
-    def build(self):
+    def __call__(self):
         return model_factory(self.api.get())
 
 
-class ItemList(Model):
+class TrackList(Collection):
+    _items = ()
+
     @classmethod
-    def from_api(cls, items: list):
+    def from_list(cls, items: list):
         return cls(
             ref=mm.Ref.playlist(uri=str(URI(URIType.PLAYLIST)), name=None),
-            api=items
+            api=None,
+            _items=[Track.from_api(t) for t in items],
         )
 
-    def items(self):
-        return list(model_factory_map(self.api))
+    @property
+    def items(self) -> Iterator["Model"]:
+        yield from self._items
 
-    def tracks(self):
-        return self.items()
 
-    def build(self):
-        return mm.Playlist(
-            uri=self.uri,
-            name=self.name,
-            tracks=[t.full for t in self.items()],
-            last_modified=to_timestamp("today"),
+class ItemList(Collection):
+    _items = ()
+
+    @classmethod
+    def from_list(cls, items: list, item_type: Type["Model"]):
+        return cls(
+            ref=mm.Ref.directory(uri=str(URI(URIType.DIRECTORY)), name=None),
+            api=None,
+            _items=[item_type.from_api(t) for t in items],
         )
+
+    @property
+    def items(self) -> Iterator["Model"]:
+        yield from self._items
 
 
 class Future(Model):
     @classmethod
     @cache_future
-    def from_api(cls, future, /, *, ref_type: mm.Ref, title: str):
+    def from_api(cls, future, /, *, ref_type: str, title: str):
         uri = URI(URIType.FUTURE, str(hash(future)))
         return cls(
             ref=mm.Ref(type=ref_type, uri=str(uri), name=feat_item(title)),
@@ -470,14 +512,14 @@ class Future(Model):
     def from_uri(cls, session: tdl.Session, /, *, uri: str):
         future = cls.from_cache(session, uri=uri)
         if future:
-            return model_factory(future.api())
+            return future.api()
 
 
 def model_factory(api_item):
     try:
         tdl_api = next(k for k in _model_map.keys() if isinstance(api_item, k))
     except StopIteration:
-        raise ValueError(f"Not valid value to model: {api_item.__class__.__name__} {api_item!r}")
+        raise ValueError(f"Model not supported: {api_item.__class__.__name__} {api_item!r}")
     else:
         return _model_map[tdl_api](api_item)
 
@@ -489,7 +531,7 @@ def model_factory_map(iterable):
             if model:
                 yield model
         except ValueError as e:
-            logger.error(e)
+            logger.warning(e)
 
 
 _model_map = {
@@ -499,10 +541,11 @@ _model_map = {
     tdl.Artist: Artist.from_api,
     tdl.Playlist: Playlist.from_api,
     tdl.Mix: Mix.from_api,
+    tdl.MixV2: Mix.from_api,
     tdl.Page: Page.from_api,
     tdl.page.PageLink: PageLink.from_api,
     tdl.page.PageItem: PageItem.from_api,
-    list: ItemList.from_api
+    dict: return_none,
 }
 
 

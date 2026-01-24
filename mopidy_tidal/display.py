@@ -11,15 +11,16 @@ DOWN_UP_PAIRED_ARROWS = u"\u21F5"
 DOWNWARDS_PAIRED_ARROWS = u"\u21CA"
 BLACK_DOWN_POINTING_TRIANGLE = u"\u25BC"
 WARNING_SIGN = u"\u26A0"
+EXCLAMATION_QUESTION_MARK = u"\u2049"
 
 META_TAGS = {
     Quality.low_96k.value: DOWNWARDS_PAIRED_ARROWS,
     Quality.low_320k.value: DOWN_UP_PAIRED_ARROWS,
     Quality.high_lossless.value: None,
     "MQA": M_CIRCLE,
-    Quality.hi_res.value: HIRES_SQUARE,
-    Quality.hi_res_lossless.value: HIRES_SQUARE,
+    Quality.hi_res_lossless: HIRES_SQUARE,
     "HIRES_LOSSLESS": HIRES_SQUARE,
+    None: EXCLAMATION_QUESTION_MARK,
 }
 
 FEAT_CHARS = "".join(
@@ -75,7 +76,7 @@ def track_display_name(tidal_track):
         tags = ' '.join(i for i in (META_TAGS.get(tag) for tag in tidal_track.media_metadata_tags) if i)
         return u"{0} {1}".format(tags, tidal_track.name)
     else:
-        tag = META_TAGS.get(tidal_track.audio_quality.value)
+        tag = META_TAGS.get(tidal_track.audio_quality)
         if tag:
             return u"{0} {1}".format(tag, tidal_track.name)
     return tidal_track.name

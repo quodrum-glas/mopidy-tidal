@@ -4,16 +4,12 @@ from cachetools.keys import hashkey
 
 
 _by_uri_cache = LRUCache(maxsize=16*1024)
-_items_cache = LRUCache(maxsize=16*1024)
 _futures_cache = LRUCache(maxsize=16*1024)
+_items_cache = LRUCache(maxsize=16*1024)
 
 cached_by_uri = cached(
     _by_uri_cache,
     key=lambda *args, uri, **kwargs: hash(uri),
-)
-cached_items = cached(
-    _items_cache,
-    key=lambda item, *args, **kwargs: hashkey(item.uri, item.last_modified),
 )
 cached_future = cached(
     _futures_cache,
@@ -38,3 +34,10 @@ def cache_future(_callable):
             _futures_cache[hash(item.ref.uri)] = item
         return item
     return wrapper
+
+
+def cached_items(_callable):
+    return cached(
+        _items_cache,
+        key=lambda item, *args, **kwargs: hashkey(item.uri, item.last_modified, _callable.__name__),
+    )(_callable)

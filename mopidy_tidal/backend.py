@@ -48,7 +48,7 @@ class TidalBackend(ThreadingActor, backend.Backend):
         client_id = self.get_config("client_id")
         client_secret = self.get_config("client_secret")
         config = Config(quality=Quality(self.get_config("quality")))
-        is_hires_quality = config.quality in [Quality.hi_res.value, Quality.hi_res_lossless.value]
+        is_hires_quality = config.quality == Quality.hi_res_lossless.value
         login_pkce = is_hires_quality or self.get_config("login_pkce")
         if client_id:
             if login_pkce:

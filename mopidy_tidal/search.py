@@ -60,7 +60,7 @@ def to_result(key):
     )
 )
 def tidal_search(session: tdl.Session, /, *, query, total, exact=False):
-    logger.info("Search query: %r", query)
+    logger.debug("Search query: %r", query)
     queries = {
         _search_fields[k]: query.pop(k)
         # this picks in order search fields
@@ -72,7 +72,7 @@ def tidal_search(session: tdl.Session, /, *, query, total, exact=False):
         # pick first field and ignore subsequent since we can't squash keywords
         queries[(tdl.Playlist, )] = next(v for v in query.values())
 
-    logger.info("Search translated query: %r", queries)
+    logger.debug("Search translated query: %r", queries)
     results = defaultdict(list)
     for thread in threaded(*(
         partial(paginated, partial(session.search, q, models=m), total=total)
@@ -89,8 +89,8 @@ def tidal_search(session: tdl.Session, /, *, query, total, exact=False):
                 if meta:
                     results[meta.to_k].extend(meta.to_make(i) for i in page[k])
 
-    logger.info("Search results: %r", dict((k, len(v)) for k, v in results.items()))
-    threaded(*(i.build for items in results.values() for i in items), max_workers=10)
-    logger.info("Search results built")
-    return {k: [i.full for i in v] for k, v in results.items()}
+    logger.debug("Search results: %r", dict((k, len(v)) for k, v in results.items()))
+    threaded(*(i for items in results.values() for i in items), max_workers=10)
+    logger.debug("Search results built")
+    return results
 

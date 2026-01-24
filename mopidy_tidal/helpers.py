@@ -3,10 +3,11 @@ import socket
 from collections import deque
 from functools import wraps
 from time import time
+from typing import Any, Type, List
 
 
 class Throttle:
-    def __init__(self, calls, interval):
+    def __init__(self, calls: int, interval: int):
         self.calls = calls
         self.interval = interval
         self.__call_times = deque([0.0], maxlen=calls+1)
@@ -24,16 +25,27 @@ class Throttle:
 class ThrottlingError(Exception):
     pass
 
+class Catch:
+    def __init__(self, *args: Type[Exception], default: Any = None):
+        self.exceptions = args
+        self.default = default
+
+    def __call__(self, _callable):
+        @wraps(_callable)
+        def wrapper(*args, **kwargs):
+            try:
+                return _callable(*args, **kwargs)
+            except self.exceptions:
+                return self.default
+        return wrapper
+
 
 def to_timestamp(dt):
-    if not dt:
-        return 0
     if isinstance(dt, str):
         if dt.lower() == "today":
-            dt = datetime.datetime.combine(
-                datetime.datetime.now().date(),
-                datetime.time.min
-            ).timestamp()
+            dt = datetime.datetime(
+                *datetime.date.today().timetuple()[:3]
+            )
         else:
             dt = datetime.datetime.fromisoformat(dt)
     if isinstance(dt, datetime.datetime):

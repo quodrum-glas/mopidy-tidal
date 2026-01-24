@@ -5,10 +5,11 @@ from pathlib import Path
 
 from cachetools import TTLCache, cachedmethod
 from mopidy import backend
-from mopidy_tidal.helpers import Throttle
+from mopidy_tidal.helpers import Catch, Throttle
 from mopidy_tidal.uri import URI
 
 from tidalapi.media import ManifestMimeType
+from tidalapi.exceptions import ObjectNotFound
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class TidalPlaybackProvider(backend.PlaybackProvider):
     __cache = TTLCache(maxsize=128, ttl=120)
 
     @cachedmethod(lambda slf: slf.__cache)
+    @Catch(ObjectNotFound)
     @Throttle(calls=2, interval=2)
     def translate_uri(self, uri):
         logger.debug("TidalPlaybackProvider translate_uri: %s", uri)

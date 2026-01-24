@@ -77,7 +77,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
             ]
         return [
             t.ref
-            for t in lookup_uri(self.backend.session, uri).tracks()
+            for t in lookup_uri(self.backend.session, uri)
         ]
 
     def create(self, name: str) -> Optional[Playlist]:
@@ -137,7 +137,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
         injections = {p.uri: p for p in self.INJECTED_PLAYLISTS.values()}
         if uri in injections:
             return injections[uri]
-        return lookup_uri(self.backend.session, uri).full
+        return lookup_uri(self.backend.session, uri).model
 
     def refresh(self, *args, **kwargs) -> None:
         """
@@ -184,7 +184,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
         logger.debug(f"Getting {method} for track: %s", track.name)
         playlist = playlist.replace(
             name=f"{method}: {track.name}",
-            tracks=[t.full for t in getattr(track, method, lambda: [])()],
+            tracks=[t.model for t in getattr(track, method, lambda: [])()],
         )
         self.INJECTED_PLAYLISTS[method] = playlist
         return playlist

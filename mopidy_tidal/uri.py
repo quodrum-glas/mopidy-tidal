@@ -29,7 +29,7 @@ class URI:
     _ext = Extension.ext_name
     _sep = ":"
 
-    def __init__(self, _type, _id: str = None):
+    def __init__(self, _type: str, _id: str = None):
         uri = self._sep.join(map(str, filter(bool, (self._ext, _type, _id))))
         self._data = URIData(uri, _type, _id)
 
