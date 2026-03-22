@@ -1,148 +1,70 @@
-import pytest
-from tidalapi.album import Album
-from tidalapi.artist import Artist
-from tidalapi.media import Track
+from __future__ import annotations
 
-test_queries = [
-    (  # Any
-        dict(
-            any=["nonsuch"],
-        ),
-        dict(tracks=0, artists=0, albums=0),
-        "nonsuch",
-        (Artist, Album, Track),
-    ),
-    (  # Album
-        dict(
-            album=["Album-1"],
-        ),
-        dict(tracks=0, artists=0, albums=None),
-        "Album-1",
-        (Album,),
-    ),
-    (  # Artist
-        dict(
-            artist=["Artist-1"],
-        ),
-        dict(tracks=0, artists=None, albums=0),
-        "Artist-1",
-        (Artist,),
-    ),
-    (  # No results
-        dict(
-            artist=["Artist-1"],
-            album=["Album-1"],
-            track_name=["Track-1"],
-            any=["any1"],
-        ),
-        dict(tracks=0, artists=0, albums=0),
-        "any1 Artist-1 Album-1 Track-1",
-        (Track,),
-    ),
-    (  # Tracks
-        dict(
-            artist="Artist-1",
-            album=["Album-1"],
-            track_name=["Track-1"],
-            any=["any1"],
-        ),
-        dict(tracks=None, artists=0, albums=0),
-        "any1 Artist-1 Album-1 Track-1",
-        (Track,),
-    ),
-]
+from unittest.mock import MagicMock, patch
+
+import tidalapi as tdl
+
+from mopidy_tidal.search import _KEY_MAP, _SEARCH_FIELDS, _TOP_HIT_KEY, tidal_search
 
 
-@pytest.mark.parametrize("query, results, query_str, models", test_queries)
-@pytest.mark.xfail(reason="Broken test due to change in API")
-def test_search_inexact(
-    mocker,
-    tidal_search,
-    query,
-    results,
-    query_str,
-    models,
-    tidal_tracks,
-    tidal_artists,
-    tidal_albums,
-    compare,
-):
-    # generate the right query.  We use list slicing since we the fixture isn't
-    # available in the parametrizing code.
-    _l = locals()
-    results = {k: _l[f"tidal_{k}"][:v] for k, v in results.items()}
-    session = mocker.Mock()
-    session.search.return_value = results
-    artists, albums, tracks = tidal_search(session, query=query, exact=False)
-    # NOTE: There is no need to copy the extra artist/album tracks into
-    # results["tracks"]: the call to tidal_search() will actually do that for
-    # us.
-    compare(results["tracks"], tracks, "track")
-    compare(results["artists"], artists, "artist")
-    compare(results["albums"], albums, "album")
-    session.search.assert_called_once_with(query_str, models=models)
+class TestSearchFields:
+    def test_any_includes_all_types(self):
+        assert tdl.Track in _SEARCH_FIELDS["any"]
+        assert tdl.Album in _SEARCH_FIELDS["any"]
+        assert tdl.Artist in _SEARCH_FIELDS["any"]
+        assert tdl.Playlist in _SEARCH_FIELDS["any"]
+
+    def test_track_name_maps_to_track(self):
+        assert _SEARCH_FIELDS["track_name"] == (tdl.Track,)
 
 
-@pytest.mark.parametrize("query, results, query_str, models", test_queries)
-@pytest.mark.xfail(reason="Broken test due to change in API")
-def test_search_exact(
-    mocker,
-    tidal_search,
-    query,
-    results,
-    query_str,
-    models,
-    tidal_tracks,
-    tidal_artists,
-    tidal_albums,
-    compare,
-):
-    # generate the right query.  We use list slicing since we the fixture isn't
-    # available in the parametrizing code.
-    _l = locals()
-    results = {k: _l[f"tidal_{k}"][:v] for k, v in results.items()}
-    session = mocker.Mock()
-    session.search.return_value = results
-    artists, albums, tracks = tidal_search(session, query=query, exact=True)
+class TestKeyMap:
+    def test_playlists_map_to_albums(self):
+        key, override = _KEY_MAP["playlists"]
+        assert key == "albums"
+        assert override is not None
 
-    if "track_name" in query:
-        results["tracks"] = [
-            t for t in results["tracks"] if t.name == query["track_name"][0]
-        ]
-    if "album" in query:
-        results["albums"] = [
-            a for a in results["albums"] if a.name == query["album"][0]
-        ]
-        for album in results["albums"]:
-            results["tracks"] += album.tracks()
-    if "artist" in query:
-        results["artists"] = [
-            a for a in results["artists"] if a.name == query["artist"][0]
-        ]
-        for artist in results["artists"]:
-            results["tracks"] += artist.get_top_tracks()
-    compare(results["tracks"], tracks, "track")
-    compare(results["artists"], artists, "artist")
-    compare(results["albums"], albums, "album")
-    session.search.assert_called_once_with(query_str, models=models)
+    def test_tracks_no_override(self):
+        key, override = _KEY_MAP["tracks"]
+        assert key == "tracks"
+        assert override is None
 
 
-@pytest.mark.xfail(reason="Unknown")
-def test_malformed_api_response(mocker, tidal_search, tidal_tracks, compare):
-    session = mocker.Mock()
-    session.search.return_value = {
-        # missing albums and artists
-        "tracks": tidal_tracks,
-        # new category
-        "nonsuch": tidal_tracks,
-    }
-    query = dict(
-        artist=["Artist-1"],
-        album=["Album-1"],
-        track_name=["Track-1"],
-        any=["any1"],
-    )
-    artists, albums, tracks = tidal_search(session, query=query, exact=False)
-    assert not artists
-    assert not albums
-    compare(tidal_tracks, tracks, "track")
+class TestTopHitKey:
+    def test_playlist_maps_to_albums(self):
+        assert _TOP_HIT_KEY[tdl.Playlist] == "albums"
+
+    def test_track_maps_to_tracks(self):
+        assert _TOP_HIT_KEY[tdl.Track] == "tracks"
+
+
+class TestTidalSearch:
+    def _mock_session(self, search_results):
+        session = MagicMock(spec=tdl.Session)
+        session.search.return_value = search_results
+        return session
+
+    def test_basic_track_search(self):
+        from tests.test_models import _fake_track
+
+        track = _fake_track("1", "Song")
+        session = self._mock_session({"tracks": [track], "top_hit": None})
+
+        result = tidal_search(
+            session,
+            query={"track_name": ["Song unique test"]},
+            total=10,
+            exact=False,
+        )
+        assert "tracks" in result
+        assert len(result["tracks"]) >= 1
+
+    def test_empty_results(self):
+        session = self._mock_session({"tracks": [], "albums": [], "artists": []})
+        result = tidal_search(
+            session,
+            query={"any": ["nonexistent query xyz"]},
+            total=10,
+            exact=False,
+        )
+        assert all(v == [] for v in result.values())
