@@ -1,46 +1,17 @@
 from __future__ import annotations
 
-"""Search: query TIDAL, return mopidy SearchResult dicts."""
+"""Search: query TIDAL via oapi, return mopidy SearchResult dicts."""
 
 import logging
 from collections import defaultdict
-from functools import partial
 
-import tidalapi as tdl
 from cachetools import LRUCache, cached
 from cachetools.keys import hashkey
 
 from mopidy_tidal.models import model_factory
 from mopidy_tidal.models.playlist import PlaylistAsAlbum
-from mopidy_tidal.workers import paginated, threaded
 
 logger = logging.getLogger(__name__)
-
-_SEARCH_FIELDS: dict[str, tuple[type, ...]] = {
-    "any": (tdl.Album, tdl.Artist, tdl.Track, tdl.Playlist),
-    "album": (tdl.Album,),
-    "artist": (tdl.Artist,),
-    "albumartist": (tdl.Artist,),
-    "performer": (tdl.Artist,),
-    "composer": (tdl.Artist,),
-    "track_name": (tdl.Track,),
-}
-
-# TIDAL response key → (mopidy result key, optional wrapper override)
-_KEY_MAP: dict[str, tuple[str, object | None]] = {
-    "artists": ("artists", None),
-    "albums": ("albums", None),
-    "tracks": ("tracks", None),
-    "playlists": ("albums", PlaylistAsAlbum.from_api),
-}
-
-# top_hit type → mopidy result key
-_TOP_HIT_KEY: dict[type, str] = {
-    tdl.Artist: "artists",
-    tdl.Album: "albums",
-    tdl.Track: "tracks",
-    tdl.Playlist: "albums",
-}
 
 
 @cached(
@@ -51,43 +22,59 @@ _TOP_HIT_KEY: dict[type, str] = {
         exact,
     ),
 )
-def tidal_search(
-    session: tdl.Session,
-    /,
-    *,
-    query: dict[str, list[str]],
-    total: int,
-    exact: bool = False,
-) -> dict[str, list]:
-    logger.info("Search query: %r", query)
-    query = dict(query)  # don't mutate caller's dict
-    queries: dict[tuple[type, ...], list[str]] = {
-        _SEARCH_FIELDS[k]: query.pop(k)
-        for k in reversed(_SEARCH_FIELDS)
-        if k in query
-    }
-    if query:
-        queries[(tdl.Playlist,)] = next(v for v in query.values())
+def tidal_search(session, /, *, query, total, exact=False):
+    logger.info("Search query: %r (total=%d, exact=%s)", query, total, exact)
 
-    results: dict[str, list] = defaultdict(list)
+    parts = []
+    for field in ("any", "track_name", "album", "artist", "albumartist", "performer", "composer"):
+        if field in query:
+            parts.extend(query[field])
+    search_term = " ".join(parts)
+    if not search_term:
+        return {}
 
-    for thread in threaded(*(
-        partial(paginated, partial(session.search, q, models=m), total=total)
-        for m, q in queries.items()
-    )):
-        for page in thread:
-            top_hit = page.pop("top_hit", None)
-            if top_hit:
-                key = _TOP_HIT_KEY.get(type(top_hit))
-                if key:
-                    results[key].append(model_factory(top_hit))
+    # Determine which result types to return based on query fields
+    want_tracks = "any" in query or "track_name" in query
+    want_albums = "any" in query or "album" in query
+    want_artists = "any" in query or any(
+        f in query for f in ("artist", "albumartist", "performer", "composer")
+    )
+    want_playlists = "any" in query
 
-            for k, items in page.items():
-                match = _KEY_MAP.get(k)
-                if match:
-                    out_key, override = match
-                    wrap = override or model_factory
-                    results[out_key].extend(wrap(i) for i in items)
+    results = session.search(search_term)
+    out: dict[str, list] = defaultdict(list)
 
-    logger.info("Search results: %r", {k: len(v) for k, v in results.items()})
-    return {k: [i.full for i in v] for k, v in results.items()}
+    if want_tracks:
+        # Hydrate tracks with artists+albums
+        raw_tracks = results.tracks[:total]
+        if raw_tracks:
+            hydrated = session.get_tracks(track_ids=[t.id for t in raw_tracks])
+            for t in hydrated:
+                try:
+                    out["tracks"].append(model_factory(t))
+                except ValueError:
+                    pass
+
+    if want_albums:
+        for a in results.albums[:total]:
+            try:
+                out["albums"].append(model_factory(a))
+            except ValueError:
+                pass
+
+    if want_artists:
+        for a in results.artists[:total]:
+            try:
+                out["artists"].append(model_factory(a))
+            except ValueError:
+                pass
+
+    if want_playlists:
+        for p in results.playlists[:total]:
+            try:
+                out["albums"].append(PlaylistAsAlbum.from_api(p))
+            except (ValueError, AttributeError):
+                pass
+
+    logger.info("Search results: %s", {k: len(v) for k, v in out.items()})
+    return {k: [i.full for i in v] for k, v in out.items()}

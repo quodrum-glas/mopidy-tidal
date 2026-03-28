@@ -19,8 +19,25 @@ __all__ = (
 import logging
 from collections.abc import Iterator
 
-import tidalapi as tdl
-from tidalapi.models.page import PageItem as TdlPageItem, PageLink as TdlPageLink, RoleItem as TdlRoleItem
+from tidalapi import Session as TidalSession
+from tidalapi.models_v1 import (
+    Track as TidalTrackV1,
+    Album as TidalAlbumV1,
+    Artist as TidalArtistV1,
+    Playlist as TidalPlaylistV1,
+    PageItem as TidalPageItemV1,
+    PageLink as TidalPageLinkV1,
+    RoleItem as TidalRoleItemV1,
+    Mix as TidalMixV1,
+    Page as TidalPageV1,
+    Video as TidalVideoV1,
+)
+from tidalapi.models import (
+    Album as TidalAlbum,
+    Artist as TidalArtist,
+    Track as TidalTrack,
+    Playlist as TidalPlaylist,
+)
 
 from mopidy_tidal.helpers import return_none
 from mopidy_tidal.uri import URI, URIType
@@ -41,17 +58,21 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _MODEL_MAP: dict[type, object] = {
-    tdl.Track: Track.from_api,
-    tdl.Video: return_none,
-    tdl.Album: Album.from_api,
-    tdl.Artist: Artist.from_api,
-    tdl.Playlist: Playlist.from_api,
-    tdl.Mix: Mix.from_api,
-    tdl.Page: Page.from_api,
-    TdlPageLink: PageLink.from_api,
-    TdlPageItem: PageItem.from_api,
-    TdlRoleItem: return_none,
-    list: ItemList.from_api,
+    TidalTrackV1: Track.from_api,
+    TidalVideoV1: return_none,
+    TidalAlbumV1: Album.from_api,
+    TidalAlbum: Album.from_api,
+    TidalArtistV1: Artist.from_api,
+    TidalArtist: Artist.from_api,
+    TidalPlaylistV1: Playlist.from_api,
+    TidalPlaylist: Playlist.from_api,
+    TidalMixV1: Mix.from_api,
+    TidalPageV1: Page.from_v1,
+    TidalPageLinkV1: PageLink.from_v1,
+    TidalPageItemV1: PageItem.from_v1,
+    TidalRoleItemV1: return_none,
+    TidalTrack: Track.from_api,
+    list: ItemList.from_v1,
 }
 
 _URI_TYPE_MAP: dict[URIType, object] = {
@@ -81,8 +102,7 @@ def model_factory_map(iterable: object) -> Iterator[Model]:
         except ValueError as e:
             logger.error(e)
 
-
-def lookup_uri(session: tdl.Session, uri: str) -> Model:
+def lookup_uri(session: TidalSession, uri: str) -> Model:
     uri = str(uri)
     model_fn = _URI_TYPE_MAP.get(URI.from_string(uri).type)
     if model_fn is None:

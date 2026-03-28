@@ -1,53 +1,56 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, cast
+
 """Playback provider: translates tidal:// URIs into playable URLs."""
 
 import logging
 from pathlib import Path
 
 from cachetools import TTLCache, cachedmethod
-from mopidy import backend
+from mopidy.backend import PlaybackProvider
 
-from mopidy_tidal import Extension
 from mopidy_tidal.helpers import backoff_on_error
 from mopidy_tidal.uri import URI
-from tidalapi.stream import ManifestMimeType
+
+if TYPE_CHECKING:
+    from mopidy_tidal.backend import TidalBackend
 
 logger = logging.getLogger(__name__)
 
 
-class TidalPlaybackProvider(backend.PlaybackProvider):
+class TidalPlaybackProvider(PlaybackProvider):
 
-    MAX_MANIFEST_FILES = 5
+    MAX_CACHE_MANIFEST_FILES = 5
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
         self.__cache: TTLCache = TTLCache(maxsize=128, ttl=120)
+        self.backend = cast("TidalBackend", self.backend)
         self.n = 0
 
     @cachedmethod(lambda self: self.__cache)
     @backoff_on_error(seconds=5.0)
     def translate_uri(self, uri: str) -> str | None:
         track_id = URI.from_string(uri).track
-        stream = self.backend.session.get_stream(track_id)
+        stream = self.backend.session.get_stream(track_id, self.backend.quality)
 
-        logger.debug(
+        logger.info(
             "Playback: track=%s quality=%s codec=%s %dbit/%dHz",
             track_id, stream.audio_quality, stream.codec,
             stream.bit_depth, stream.sample_rate,
         )
 
-        if stream.manifest_mime_type == ManifestMimeType.MPD.value:
+        if stream.is_mpd:
             mpd_xml = stream.get_manifest_data()
             if not mpd_xml:
                 raise ValueError("No MPD manifest available")
-            cache_dir = Extension.get_cache_dir(self.backend._config)
-            mpd_path = Path(cache_dir, f"manifest_{self.n % self.MAX_MANIFEST_FILES}.mpd")
+            mpd_path = Path(self.backend.cache_dir, f"manifest_{self.n % self.MAX_CACHE_MANIFEST_FILES}.mpd")
             mpd_path.write_text(mpd_xml)
             self.n += 1
             return f"file://{mpd_path}"
 
-        if stream.manifest_mime_type == ManifestMimeType.BTS.value:
+        if stream.is_bts:
             manifest = stream.get_stream_manifest()
             if manifest:
                 urls = manifest.get_urls()

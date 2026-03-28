@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import mopidy.models as mm
-import tidalapi as tdl
+from mopidy.models import Image as MopidyImage, Playlist as MopidyPlaylist, Ref as MopidyRef
+from tidalapi import Session as TidalSession
+from tidalapi.models_v1 import Mix as TidalMixV1, Track as TidalTrackV1
 
 from mopidy_tidal.helpers import to_timestamp
 from mopidy_tidal.uri import URI, URIType
@@ -12,21 +13,21 @@ from .track import Track
 
 class Mix(Model):
     @classmethod
-    def from_api(cls, mix: tdl.Mix) -> Mix:
+    def from_api(cls, mix: TidalMixV1) -> Mix:
         uri = URI(URIType.MIX, mix.id)
         return cls(
-            ref=mm.Ref.playlist(uri=str(uri), name=f"{mix.title} ({mix.sub_title})"),
+            ref=MopidyRef.playlist(uri=str(uri), name=f"{mix.title} ({mix.sub_title})"),
             api=mix,
         )
 
     @classmethod
-    def from_uri(cls, session: tdl.Session, /, *, uri: str) -> Mix:
+    def from_uri(cls, session: TidalSession, /, *, uri: str) -> Mix:
         parsed = URI.from_string(uri)
         if parsed.type != URIType.MIX:
             raise ValueError(f"Not a valid uri for Mix: {uri}")
         mix = session.mix(parsed.mix)
         return cls(
-            ref=mm.Ref.playlist(uri=str(parsed), name=f"{mix.title} ({mix.sub_title})"),
+            ref=MopidyRef.playlist(uri=str(parsed), name=f"{mix.title} ({mix.sub_title})"),
             api=mix,
         )
 
@@ -34,8 +35,8 @@ class Mix(Model):
     def last_modified(self) -> int:
         return to_timestamp(self.api.updated)
 
-    def build(self) -> mm.Playlist:
-        return mm.Playlist(
+    def build(self) -> MopidyPlaylist:
+        return MopidyPlaylist(
             uri=self.uri,
             name=self.name,
             tracks=[t.full for t in self.items()],
@@ -49,9 +50,9 @@ class Mix(Model):
         return [
             Track.from_api(item)
             for item in self.api.items()
-            if isinstance(item, tdl.Track)
+            if isinstance(item, TidalTrackV1)
         ]
 
     @property
-    def images(self) -> list[mm.Image] | None:
+    def images(self) -> list[MopidyImage] | None:
         return None

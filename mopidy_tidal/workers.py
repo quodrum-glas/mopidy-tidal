@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-"""Threaded and paginated execution helpers."""
+"""Threaded, paginated, and batched execution helpers."""
 
+import threading
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from functools import partial
 from typing import Any
 
@@ -58,3 +59,85 @@ def threaded(*args: Callable[[], Any], max_workers: int = MAX_WORKERS) -> Iterat
 def sorted_threaded(*args: Callable[[], Any], **kwargs: Any) -> list[Any]:
     results = dict(_threaded(*args, **kwargs))
     return [results[call] for call in args]
+
+
+# -- batch collector ------------------------------------------------------
+
+
+class BatchCollector:
+    """Collect items from concurrent threads, flush as a batch.
+
+    Each :meth:`submit` call returns a :class:`~concurrent.futures.Future`.
+    When *timeout* expires or *max_size* items accumulate, *flush_fn* is
+    called with the full list of keys.  It must return a ``{key: result}``
+    dict.  Each waiting Future is resolved from that dict.
+
+    Usage::
+
+        collector = BatchCollector(flush_fn=my_batch_fetch, timeout=0.8)
+        future = collector.submit("key1")   # from thread 1
+        future = collector.submit("key2")   # from thread 2
+        result = future.result()             # blocks until flush
+    """
+
+    def __init__(
+        self,
+        flush_fn: Callable[[list], dict],
+        timeout: float = 0.8,
+        max_size: int = 50,
+    ) -> None:
+        self._flush_fn = flush_fn
+        self._timeout = timeout
+        self._max_size = max_size
+        self._lock = threading.Lock()
+        self._pending: list[tuple[str, Future]] = []
+        self._timer: threading.Timer | None = None
+
+    def submit(self, key: str) -> Future:
+        """Add a key to the current batch. Returns a Future for the result."""
+        future: Future = Future()
+        with self._lock:
+            self._pending.append((key, future))
+            if len(self._pending) >= self._max_size:
+                self._schedule_flush(immediate=True)
+            elif self._timer is None:
+                self._schedule_flush()
+        return future
+
+    def _schedule_flush(self, immediate: bool = False) -> None:
+        """Must be called with self._lock held."""
+        if self._timer is not None:
+            self._timer.cancel()
+        if immediate:
+            self._timer = None
+            threading.Thread(target=self._flush, daemon=True).start()
+        else:
+            self._timer = threading.Timer(self._timeout, self._flush)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def _flush(self) -> None:
+        with self._lock:
+            batch = self._pending[:]
+            self._pending.clear()
+            if self._timer is not None:
+                self._timer.cancel()
+                self._timer = None
+
+        if not batch:
+            return
+
+        keys = [key for key, _ in batch]
+        try:
+            results = self._flush_fn(keys)
+        except Exception as exc:
+            for _, future in batch:
+                future.set_exception(exc)
+            return
+
+        for key, future in batch:
+            result = results.get(key)
+            if result is not None:
+                future.set_result(result)
+            else:
+                future.set_exception(KeyError(f"Not found in batch: {key}"))

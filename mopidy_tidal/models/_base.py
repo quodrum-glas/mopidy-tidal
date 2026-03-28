@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-import mopidy.models as mm
+from mopidy.models import Image as MopidyImage, Ref as MopidyRef
 
 from mopidy_tidal.helpers import to_timestamp
 
 if TYPE_CHECKING:
-    import tidalapi as tdl
+    from tidalapi import Session as TidalSession
 
 IMAGE_SIZE = 320
 
@@ -22,11 +22,11 @@ def _year_from(date_str: str) -> str | None:
 
 
 class Model:
-    def __init__(self, *, ref: mm.Ref, api: object, **kwargs: object) -> None:
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+    def __init__(self, *, ref: MopidyRef, api: object, session: TidalSession | None = None, **kwargs: object) -> None:
+        self.__dict__.update(kwargs)
         self.ref = ref
         self.api = api
+        self.session: TidalSession | None = session
         self._full: object | None = None
 
     @classmethod
@@ -34,7 +34,7 @@ class Model:
         raise NotImplementedError
 
     @classmethod
-    def from_uri(cls, session: tdl.Session, /, *, uri: str) -> Model:
+    def from_uri(cls, session: TidalSession, /, *, uri: str) -> Model:
         raise NotImplementedError
 
     @property
@@ -65,5 +65,5 @@ class Model:
         raise NotImplementedError
 
     @property
-    def images(self) -> list[mm.Image] | None:
+    def images(self) -> list[MopidyImage] | None:
         raise NotImplementedError

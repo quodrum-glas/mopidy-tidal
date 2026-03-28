@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import mopidy.models as mm
-import tidalapi as tdl
+from mopidy.models import Playlist as MopidyPlaylist, Ref as MopidyRef
+from tidalapi import Session as TidalSession
 
 from mopidy_tidal.cache import cache_future, cached_future
 from mopidy_tidal.display import feat_item
@@ -13,9 +13,9 @@ from ._base import Model
 
 class ItemList(Model):
     @classmethod
-    def from_api(cls, items: list) -> ItemList:
+    def from_v1(cls, items: list) -> ItemList:
         return cls(
-            ref=mm.Ref.playlist(uri=str(URI(URIType.PLAYLIST)), name=None),
+            ref=MopidyRef.playlist(uri=str(URI(URIType.PLAYLIST)), name=None),
             api=items,
         )
 
@@ -27,8 +27,8 @@ class ItemList(Model):
     def tracks(self) -> list[Model]:
         return self.items()
 
-    def build(self) -> mm.Playlist:
-        return mm.Playlist(
+    def build(self) -> MopidyPlaylist:
+        return MopidyPlaylist(
             uri=self.uri,
             name=self.name,
             tracks=[t.full for t in self.items()],
@@ -39,20 +39,20 @@ class ItemList(Model):
 class Future(Model):
     @classmethod
     @cache_future
-    def from_api(cls, future: object, /, *, ref_type: str, title: str) -> Future:
+    def from_v1(cls, future: object, /, *, ref_type: str, title: str) -> Future:
         uri = URI(URIType.FUTURE, str(hash(future)))
         return cls(
-            ref=mm.Ref(type=ref_type, uri=str(uri), name=feat_item(title)),
+            ref=MopidyRef(type=ref_type, uri=str(uri), name=feat_item(title)),
             api=future,
         )
 
     @classmethod
     @cached_future
-    def from_cache(cls, session: tdl.Session, /, *, uri: str) -> Future | None:
+    def from_cache(cls, session: TidalSession, /, *, uri: str) -> Future | None:
         return None
 
     @classmethod
-    def from_uri(cls, session: tdl.Session, /, *, uri: str) -> Model | None:
+    def from_uri(cls, session: TidalSession, /, *, uri: str) -> Model | None:
         from . import model_factory
 
         future = cls.from_cache(session, uri=uri)

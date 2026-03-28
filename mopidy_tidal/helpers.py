@@ -42,8 +42,11 @@ def to_timestamp(dt: str | datetime.datetime | float | None) -> int:
             return int(datetime.datetime.combine(
                 datetime.datetime.now().date(), datetime.time.min,
             ).timestamp())
+        # Handle 'Z' suffix (UTC timezone indicator)
+        if dt.endswith('Z'):
+            dt = dt[:-1] + '+00:00'
         # 3.10 fromisoformat needs +00:00, not +0000
-        if len(dt) >= 5 and dt[-5] in "+-" and dt[-3] != ":":
+        elif len(dt) >= 5 and dt[-5] in "+-" and dt[-3] != ":":
             dt = dt[:-2] + ":" + dt[-2:]
         dt = datetime.datetime.fromisoformat(dt)
     if isinstance(dt, datetime.datetime):

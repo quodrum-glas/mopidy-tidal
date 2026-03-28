@@ -4,19 +4,22 @@ from __future__ import annotations
 
 from tidalapi import Quality
 
-MASTER = "\u24C2"          # Ⓜ  HI_RES_LOSSLESS
+HIRES = "\U0001F1A8"       # 🆨  HI_RES_LOSSLESS
 LOSSLESS = "\U0001F1A9"    # 🆩  LOSSLESS
-DOWNGRADE = "\u21F5"       # ⇵  LOW
+HIGH = "\U000025B3"        # △ HIGH
+LOW = "\U000025BC"         # ▼  LOW
 TIDAL = "\U0001F163"       # 🅣  generic tidal item
 STAR = "\u229B"            # ⊛  favorite
 FEAT = "\u24BB"            # Ⓕ  featured
 WARNING = "\u26A0"         # ⚠  alert
+EXCLAMATION = "\U00002049" # ⁉  exclamation
 
 _QUALITY_BADGE: dict[str, str] = {
-    Quality.HI_RES_LOSSLESS.value: MASTER,
-    Quality.LOSSLESS.value: LOSSLESS,
-    Quality.HIGH.value: "",
-    Quality.LOW.value: DOWNGRADE,
+    Quality.HI_RES_LOSSLESS.value: HIRES,
+    Quality.HIRES_LOSSLESS.value: HIRES,
+    Quality.LOSSLESS.value: "",
+    Quality.HIGH.value: HIGH,
+    Quality.LOW.value: LOW,
 }
 
 
@@ -24,9 +27,16 @@ def _badge(name: str, badge: str) -> str:
     return f"{badge} {name}" if badge else name
 
 
+def track_quality(track: object) -> str:
+    media_tags = getattr(track, "media_tags", None)
+    if not media_tags:
+        return "UNKNOWN"
+    return next(iter(sorted(media_tags, key=lambda x: len(x), reverse=True)), None)
+
+
 def track_display_name(track: object) -> str:
-    audio_q = getattr(track, "audio_quality", "")
-    badge = _QUALITY_BADGE.get(audio_q, "")
+    audio_q = track_quality(track)
+    badge = _QUALITY_BADGE.get(audio_q, EXCLAMATION)
     return _badge(track.name, badge)
 
 

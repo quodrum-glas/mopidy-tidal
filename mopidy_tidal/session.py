@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 def create_session(
     *,
     client_id: str,
-    client_secret: str = "",
-    quality: str = "HIGH",
+    client_secret: str,
+    quality: str,
     token_file: str | Path | None = None,
 ) -> Session:
     """Create a tidalapi Session from mopidy config values.

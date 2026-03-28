@@ -57,7 +57,11 @@ class TidalPlaylistsProvider(PlaylistsProvider):
     @cachedmethod(lambda self: self.__as_list_cache)
     def as_list(self) -> list[Ref]:
         session = self.backend.session
-        results = session.user.favorites.playlists()
+        
+        # Use enhanced oapi user playlists
+        results = session.get_user_playlists()
+        logger.debug("Using enhanced oapi user playlists: %d items", len(results))
+            
         return [
             *(
                 m.ref.replace(name=tidal_item(m.ref.name))
@@ -95,26 +99,28 @@ class TidalPlaylistsProvider(PlaylistsProvider):
         if to_add:
             self._add_tracks(playlist.uri, to_add)
         if to_remove:
-            self._remove_tracks(playlist.uri, to_remove, old)
+            self._remove_tracks(playlist.uri, to_remove)
         return playlist
 
     def create(self, name: str) -> Playlist | None:
-        api_playlist = self.backend.session.user.create_playlist(name)
+        api_playlist = self.backend.session.create_playlist(name)
         uri = str(URI(URIType.PLAYLIST, api_playlist.id))
         logger.info("Created playlist: %s (%s)", name, uri)
-        self.__as_list_cache.clear()
+        self.refresh()
         return Playlist(uri=uri, name=name, tracks=[], last_modified=0)
 
     def delete(self, uri: str) -> bool:
         parsed = URI.from_string(uri)
         if parsed.type != URIType.PLAYLIST or not parsed.id:
             return False
-        trn = f"trn:playlist:{parsed.id}"
-        ok = self.backend.session.playlist_folders.remove([trn])
-        if ok:
+        try:
+            self.backend.session.delete_playlist(parsed.id)
             logger.info("Deleted playlist: %s", uri)
-            self.__as_list_cache.clear()
-        return ok
+            self.refresh()
+            return True
+        except Exception:
+            logger.warning("Failed to delete playlist: %s", uri)
+            return False
 
     def refresh(self) -> None:
         self.__as_list_cache.clear()
@@ -143,21 +149,15 @@ class TidalPlaylistsProvider(PlaylistsProvider):
 
     def _add_tracks(self, uri: str, track_uris: list[str] | set[str]) -> None:
         parsed = URI.from_string(uri)
-        api_playlist = self.backend.session.playlist(parsed.id)
-        track_ids = [URI.from_string(t).track for t in track_uris]
+        track_ids = [str(URI.from_string(t).track) for t in track_uris]
         logger.info("Adding %d tracks to %s", len(track_ids), uri)
-        api_playlist.add(track_ids)
+        self.backend.session.add_tracks_to_playlist(parsed.id, track_ids)
 
-    def _remove_tracks(self, uri: str, track_uris: set[str], old: Playlist) -> None:
-        remove_uris = set(track_uris)
-        indices = [i for i, t in enumerate(old.tracks) if t.uri in remove_uris]
-        if not indices:
-            return
+    def _remove_tracks(self, uri: str, track_uris: set[str]) -> None:
         parsed = URI.from_string(uri)
-        api_playlist = self.backend.session.playlist(parsed.id)
-        for idx in sorted(indices, reverse=True):
-            logger.info("Removing track at index %d from %s", idx, uri)
-            api_playlist.remove_by_index(idx)
+        track_ids = [str(URI.from_string(t).track) for t in track_uris]
+        logger.info("Removing %d tracks from %s", len(track_ids), uri)
+        self.backend.session.remove_tracks_from_playlist(parsed.id, track_ids)
 
 
 def _empty(name: str) -> Playlist:

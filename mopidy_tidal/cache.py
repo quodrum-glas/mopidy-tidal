@@ -15,6 +15,8 @@ _model_cache: LRUCache = LRUCache(maxsize=16_384)
 _items_cache: TTLCache = TTLCache(maxsize=4096, ttl=CACHE_TTL)
 _futures_cache: TTLCache = TTLCache(maxsize=1024, ttl=CACHE_TTL)
 
+# -- decorators -----------------------------------------------------------
+
 cached_by_uri = cached(
     _model_cache,
     key=lambda *args, uri, **kwargs: hash(uri),
@@ -39,6 +41,19 @@ def cache_by_uri(fn: Callable[..., Any]) -> Callable[..., Any]:
         _model_cache[hash(item.ref.uri)] = item
         return item
     return wrapper
+
+
+def cache_by_uri_if(check: Callable[[Any], bool]) -> Callable:
+    """Cache the returned model only if *check(item)* is truthy."""
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            item = fn(*args, **kwargs)
+            if check(item):
+                _model_cache[hash(item.ref.uri)] = item
+            return item
+        return wrapper
+    return decorator
 
 
 def cache_future(fn: Callable[..., Any]) -> Callable[..., Any]:

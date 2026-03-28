@@ -12,6 +12,8 @@ from mopidy_tidal.models import lookup_uri, model_factory_map
 from mopidy_tidal.search import tidal_search
 from mopidy_tidal.uri import URI, URIType
 
+from tidalapi.exceptions import NotFoundError, RateLimitError, TidalError
+
 _ARTIST_FIELDS = frozenset({"artist", "albumartist", "performer", "composer"})
 
 logger = logging.getLogger(__name__)
@@ -27,12 +29,17 @@ class TidalLibraryProvider(backend.LibraryProvider):
         if query:
             return self._distinct_from_search(field, query)
 
+        # Use enhanced oapi user collection methods
         if field in _ARTIST_FIELDS:
-            return [tidal_item(a.name) for a in session.user.favorites.artists()]
+            artists = session.get_user_artists()
+            return [tidal_item(a.name) for a in artists]
         if field == "album":
-            return [tidal_item(a.name) for a in session.user.favorites.albums()]
+            albums = session.get_user_albums()
+            return [tidal_item(a.name) for a in albums]
         if field == "track":
-            return [tidal_item(t.name) for t in session.user.favorites.tracks()]
+            tracks = session.get_user_tracks()
+            return [tidal_item(t.name) for t in tracks]
+        
         return []
 
     def _distinct_from_search(self, field: str, query: dict) -> list[str]:
@@ -62,10 +69,10 @@ class TidalLibraryProvider(backend.LibraryProvider):
             "genres": session.genres,
             "moods": session.moods,
             "mixes": session.mixes,
-            "my_artists": session.user.favorites.artists,
-            "my_albums": session.user.favorites.albums,
-            "my_playlists": session.user.favorites.playlists,
-            "my_tracks": session.user.favorites.tracks,
+            "my_artists": session.get_user_artists,
+            "my_albums": session.get_user_albums,
+            "my_playlists": session.get_user_playlists,
+            "my_tracks": session.get_user_tracks,
         }
 
         if parsed.type == URIType.DIRECTORY:
@@ -80,7 +87,7 @@ class TidalLibraryProvider(backend.LibraryProvider):
 
         try:
             model = lookup_uri(session, uri)
-        except ValueError:
+        except (ValueError, NotFoundError, TidalError):
             logger.warning("Browse request failed for: %s", uri)
             return []
         return [item.ref for item in model.items()]
@@ -96,7 +103,7 @@ class TidalLibraryProvider(backend.LibraryProvider):
         for uri in uris:
             try:
                 result[uri] = lookup_uri(self.backend.session, uri).images
-            except ValueError:
+            except (ValueError, NotFoundError, TidalError):
                 result[uri] = []
         return result
 
@@ -107,7 +114,9 @@ class TidalLibraryProvider(backend.LibraryProvider):
         tracks = []
         for uri in uris:
             try:
-                tracks.extend(t.full for t in lookup_uri(self.backend.session, uri).tracks())
-            except ValueError:
+                tracks.extend(
+                    t.full for t in lookup_uri(self.backend.session, uri).tracks()
+                )
+            except (ValueError, NotFoundError, TidalError):
                 logger.warning("Lookup failed for: %s", uri)
         return tracks
