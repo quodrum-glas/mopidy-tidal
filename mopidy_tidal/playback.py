@@ -18,9 +18,12 @@ logger = logging.getLogger(__name__)
 
 class TidalPlaybackProvider(backend.PlaybackProvider):
 
+    MAX_MANIFEST_FILES = 5
+
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
         self.__cache: TTLCache = TTLCache(maxsize=128, ttl=120)
+        self.n = 0
 
     @cachedmethod(lambda self: self.__cache)
     @backoff_on_error(seconds=5.0)
@@ -28,7 +31,7 @@ class TidalPlaybackProvider(backend.PlaybackProvider):
         track_id = URI.from_string(uri).track
         stream = self.backend.session.get_stream(track_id)
 
-        logger.info(
+        logger.debug(
             "Playback: track=%s quality=%s codec=%s %dbit/%dHz",
             track_id, stream.audio_quality, stream.codec,
             stream.bit_depth, stream.sample_rate,
@@ -39,8 +42,9 @@ class TidalPlaybackProvider(backend.PlaybackProvider):
             if not mpd_xml:
                 raise ValueError("No MPD manifest available")
             cache_dir = Extension.get_cache_dir(self.backend._config)
-            mpd_path = Path(cache_dir, f"manifest_{track_id}.mpd")
+            mpd_path = Path(cache_dir, f"manifest_{self.n % self.MAX_MANIFEST_FILES}.mpd")
             mpd_path.write_text(mpd_xml)
+            self.n += 1
             return f"file://{mpd_path}"
 
         if stream.manifest_mime_type == ManifestMimeType.BTS.value:
