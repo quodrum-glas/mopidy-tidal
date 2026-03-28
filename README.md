@@ -26,7 +26,7 @@ First install and configure Mopidy as per the instructions listed [here](https:/
 
 After installing Mopidy, you can now proceed installing the plugins that you require, including Mopidy-Tidal. :
 ```
-python3 -m pip install -U 'git+https://github.com/quodrum-glas/mopidy-tidal.git@quodrumglas#egg=Mopidy-Tidal'
+python3 -m pip install -U 'git+https://github.com/quodrum-glas/mopidy-tidal.git'
 ```
 
 Poetry can also be used to install mopidy-tidal and its dependencies.
