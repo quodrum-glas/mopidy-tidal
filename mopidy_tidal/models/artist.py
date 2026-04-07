@@ -69,11 +69,11 @@ class Artist(Model):
 
         return result
 
-    def tracks(self, limit: int = 10) -> list[Track]:
+    def tracks(self, limit: int = 20) -> list[Track]:
         from .track import Track
         if self.session:
-            return [Track.from_api(t) for t in self.session.get_artist_tracks(int(self.api.id))[:limit]]
-        return [Track.from_api(t) for t in self.api.top_tracks[:limit]]
+            return [Track.from_api(t) for t in self.session.get_artist_tracks(int(self.api.id), limit=limit)]
+        return [Track.from_api(t) for t in self.api.get_top_tracks(limit=limit)]
 
     @property
     def images(self) -> list[MopidyImage]:
