@@ -19,6 +19,7 @@ def create_session(
     client_id: str,
     client_secret: str,
     quality: str,
+    fetch_album_covers: bool,
     token_file: str | Path | None = None,
 ) -> Session:
     """Create a tidalapi Session from mopidy config values.
@@ -33,6 +34,7 @@ def create_session(
                 client_id=client_id,
                 client_secret=client_secret,
                 quality=quality,
+                fetch_album_covers=fetch_album_covers,
             )
         except Exception:
             logger.warning("Could not load session from %s", token_file, exc_info=True)
@@ -41,4 +43,5 @@ def create_session(
         client_id=client_id,
         client_secret=client_secret,
         quality=quality,
+        fetch_album_covers=fetch_album_covers,
     )

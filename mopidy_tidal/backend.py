@@ -40,6 +40,7 @@ class TidalBackend(ThreadingActor, backend.Backend):
         client_id: str = self._ext("client_id")
         client_secret: str = self._ext("client_secret")
         token_file: Path = self.data_dir / f"tidal.oauth.{client_id}.json"
+        fetch_album_covers: bool = self._ext("fetch_album_covers")
 
         logger.info("Connecting to TIDAL... quality=%s", self.quality)
 
@@ -47,6 +48,7 @@ class TidalBackend(ThreadingActor, backend.Backend):
             client_id=client_id,
             client_secret=client_secret,
             quality=self.quality,
+            fetch_album_covers=fetch_album_covers,
             token_file=token_file,
         )
 

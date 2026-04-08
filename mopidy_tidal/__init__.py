@@ -26,6 +26,7 @@ class Extension(ext.Extension):
         schema["client_id"] = config.Secret()
         schema["client_secret"] = config.Secret(optional=True)
         schema["quality"] = config.String(choices=[e.value for e in Quality])
+        schema["fetch_album_covers"] = config.Boolean(optional=True)
         schema["playlist_cache_refresh_secs"] = config.Integer(
             optional=True,
             choices=chain(range(10, 60, 10), range(60, 600, 60), range(600, 3601, 600)),
