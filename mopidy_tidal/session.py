@@ -19,29 +19,26 @@ def create_session(
     client_id: str,
     client_secret: str,
     quality: str,
-    fetch_album_covers: bool,
     token_file: str | Path | None = None,
+    widevine_cdm_path: Path | None = None,
+    fetch_album_covers: bool,
 ) -> Session:
     """Create a tidalapi Session from mopidy config values.
 
     If token_file exists, loads credentials and the session is ready to use.
     Otherwise returns a deferred session — call login methods on it.
     """
-    if token_file:
-        try:
-            return Session(
-                token_file=token_file,
-                client_id=client_id,
-                client_secret=client_secret,
-                quality=quality,
-                fetch_album_covers=fetch_album_covers,
-            )
-        except Exception:
-            logger.warning("Could not load session from %s", token_file, exc_info=True)
-
-    return Session(
+    kw = dict(
         client_id=client_id,
         client_secret=client_secret,
         quality=quality,
+        widevine_cdm_path=widevine_cdm_path,
         fetch_album_covers=fetch_album_covers,
     )
+    if token_file:
+        try:
+            return Session(token_file=token_file, **kw)
+        except Exception:
+            logger.warning("Could not load session from %s", token_file, exc_info=True)
+
+    return Session(**kw)

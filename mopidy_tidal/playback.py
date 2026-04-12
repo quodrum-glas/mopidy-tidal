@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
-
 """Playback provider: translates tidal:// URIs into playable URLs."""
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 from cachetools import TTLCache, cachedmethod
 from mopidy.backend import PlaybackProvider
@@ -36,26 +35,45 @@ class TidalPlaybackProvider(PlaybackProvider):
         stream = self.backend.session.get_stream(track_id, self.backend.quality)
 
         logger.info(
-            "Playback: track=%s quality=%s codec=%s %dbit/%dHz",
+            "Playback: track=%s quality=%s codec=%s %dbit/%dHz drm=%s",
             track_id, stream.audio_quality, stream.codec,
-            stream.bit_depth, stream.sample_rate,
+            stream.bit_depth, stream.sample_rate, stream.drm_system or "none",
         )
 
+        if stream.is_drm:
+            return self._translate_drm(stream)
+
         if stream.is_mpd:
-            mpd_xml = stream.get_manifest_data()
-            if not mpd_xml:
-                raise ValueError("No MPD manifest available")
-            mpd_path = Path(self.backend.cache_dir, f"manifest_{self.n % self.MAX_CACHE_MANIFEST_FILES}.mpd")
-            mpd_path.write_text(mpd_xml)
-            self.n += 1
-            return f"file://{mpd_path}"
+            return self._translate_mpd(stream)
 
         if stream.is_bts:
-            manifest = stream.get_stream_manifest()
-            if manifest:
-                urls = manifest.get_urls()
-                return urls[0] if urls else None
-            return None
+            return self._translate_bts(stream)
 
         logger.warning("Unknown manifest type: %s", stream.manifest_mime_type)
+        return None
+
+    def _translate_drm(self, stream) -> str | None:
+        """Decrypt Widevine DASH stream and return HTTP URL for GStreamer."""
+        from mopidy_tidal.drm import decrypt_stream
+
+        keys = self.backend.session.get_decryption_keys(stream)
+        return decrypt_stream(stream, keys)
+
+    def _translate_mpd(self, stream) -> str | None:
+        mpd_xml = stream.get_manifest_data()
+        if not mpd_xml:
+            raise ValueError("No MPD manifest available")
+        mpd_path = Path(
+            self.backend.cache_dir,
+            f"manifest_{self.n % self.MAX_CACHE_MANIFEST_FILES}.mpd",
+        )
+        mpd_path.write_text(mpd_xml)
+        self.n += 1
+        return f"file://{mpd_path}"
+
+    def _translate_bts(self, stream) -> str | None:
+        manifest = stream.get_stream_manifest()
+        if manifest:
+            urls = manifest.get_urls()
+            return urls[0] if urls else None
         return None

@@ -25,6 +25,7 @@ class Extension(ext.Extension):
         schema = super().get_config_schema()
         schema["client_id"] = config.Secret()
         schema["client_secret"] = config.Secret(optional=True)
+        schema["widevine_cdm_path"] = config.Path(optional=True)
         schema["quality"] = config.String(choices=[e.value for e in Quality])
         schema["fetch_album_covers"] = config.Boolean(optional=True)
         schema["playlist_cache_refresh_secs"] = config.Integer(
