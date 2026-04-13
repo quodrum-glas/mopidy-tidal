@@ -25,7 +25,8 @@ classifiers = [
 dependencies = [
     "cachetools >= 5.3",
     "Mopidy >= 3.0",
-    "tidalapi @ git+https://github.com/quodrum-glas/python-tidal.git",
+    "requests >= 2.31",
+    "tidalapi[drm] @ git+https://github.com/quodrum-glas/python-tidal.git",
 ]
 
 [project.optional-dependencies]
