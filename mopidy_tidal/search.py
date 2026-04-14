@@ -25,52 +25,66 @@ logger = logging.getLogger(__name__)
 def tidal_search(session, /, *, query, total, exact=False):
     logger.info("Search query: %r (total=%d, exact=%s)", query, total, exact)
 
-    parts = []
-    for field in ("any", "track_name", "album", "artist", "albumartist", "performer", "composer"):
-        if field in query:
-            parts.extend(query[field])
-    search_term = " ".join(parts)
+    search_keys = set(query.keys())
+    search_term = " ".join(i for l in query.values() for i in l)
     if not search_term:
         return {}
 
     # Determine which result types to return based on query fields
-    want_tracks = "any" in query or "track_name" in query
-    want_albums = "any" in query or "album" in query
-    want_artists = "any" in query or any(
-        f in query for f in ("artist", "albumartist", "performer", "composer")
-    )
-    want_playlists = "any" in query
+    want_tracks = search_keys.intersection({"any", "track_name"})
+    want_albums = search_keys.intersection({"any", "album"})
+    want_artists = search_keys.intersection({"any", "artist", "albumartist", "performer", "composer"})
+    want_playlists = search_keys.intersection({"any", "comment", "date", "genre"})
 
-    results = session.search(search_term)
+    include = []
+    if want_tracks:
+        include.append("tracks")
+    if want_albums:
+        include.append("albums")
+    if want_artists:
+        include.append("artists")
+    if want_playlists:
+        include.append("playlists")
+
+    if len(include) > 1:
+        results = session.search(search_term, include=include)
+    else:
+        results = None
+
     out: dict[str, list] = defaultdict(list)
 
     if want_tracks:
         # Hydrate tracks with artists+albums
-        raw_tracks = results.tracks[:total]
+        raw_tracks = results.tracks[:total] if results else session.search_tracks(search_term, limit=total)
         if raw_tracks:
-            hydrated = session.get_tracks(track_ids=[t.id for t in raw_tracks])
-            for t in hydrated:
-                try:
-                    out["tracks"].append(model_factory(t))
-                except ValueError:
-                    pass
+            max_hydrate = 20
+            for i in range(0, len(raw_tracks), max_hydrate):
+                hydrated = session.get_tracks(track_ids=[t.id for t in raw_tracks[i:i + max_hydrate]])
+                for t in hydrated:
+                    try:
+                        out["tracks"].append(model_factory(t))
+                    except ValueError:
+                        pass
 
     if want_albums:
-        for a in results.albums[:total]:
+        albums = results.albums[:total] if results else session.search_albums(search_term, limit=total)
+        for a in albums:
             try:
                 out["albums"].append(model_factory(a))
             except ValueError:
                 pass
 
     if want_artists:
-        for a in results.artists[:total]:
+        artists = results.artists[:total] if results else session.search_artists(search_term, limit=total)
+        for a in artists:
             try:
                 out["artists"].append(model_factory(a))
             except ValueError:
                 pass
 
     if want_playlists:
-        for p in results.playlists[:total]:
+        playlists = results.playlists[:total] if results else session.search_playlists(search_term, limit=total)
+        for p in playlists:
             try:
                 out["albums"].append(PlaylistAsAlbum.from_api(p))
             except (ValueError, AttributeError):
