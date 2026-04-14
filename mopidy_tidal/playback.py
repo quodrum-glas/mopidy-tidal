@@ -34,7 +34,7 @@ class TidalPlaybackProvider(PlaybackProvider):
         track_id = URI.from_string(uri).track
         stream = self.backend.session.get_stream(track_id, self.backend.quality)
 
-        logger.info(
+        logger.debug(
             "Playback: track=%s quality=%s codec=%s %dbit/%dHz drm=%s",
             track_id, stream.audio_quality, stream.codec,
             stream.bit_depth, stream.sample_rate, stream.drm_system or "none",

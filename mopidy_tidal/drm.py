@@ -180,7 +180,7 @@ def decrypt_stream(stream: StreamInfo, keys: list[tuple[str, str]]) -> str:
                 with lock:
                     cache[path] = dec
 
-        logger.info("DRM: cached all %d segments for track %s", len(stream.urls), stream.track_id)
+        logger.debug("DRM: cached all %d segments for track %s", len(stream.urls), stream.track_id)
 
     def _resolve(path: str) -> bytes | None:
         if path == "/manifest.mpd":
@@ -206,5 +206,5 @@ def decrypt_stream(stream: StreamInfo, keys: list[tuple[str, str]]) -> str:
 
     init_ready.wait(timeout=15)
     url = f"{server.base_url}/manifest.mpd"
-    logger.info("DRM: serving track %s at %s", stream.track_id, url)
+    logger.debug("DRM: serving track %s at %s", stream.track_id, url)
     return url
