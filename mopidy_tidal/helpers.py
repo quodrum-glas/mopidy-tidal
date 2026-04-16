@@ -25,8 +25,9 @@ def backoff_on_error(seconds: float = 5.0):
                 result = fn(*args, **kwargs)
                 fail_until[0] = 0.0
                 return result
-            except Exception:
+            except Exception as e:
                 logger.warning("%s failed, backing off %.0fs", fn.__name__, seconds)
+                logger.exception(e)
                 fail_until[0] = time.monotonic() + seconds
                 return None
 
