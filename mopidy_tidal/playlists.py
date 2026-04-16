@@ -12,6 +12,7 @@ from mopidy.backend import PlaylistsProvider
 from mopidy.models import Playlist, Ref
 
 from mopidy_tidal.display import alert_item, tidal_item
+from mopidy_tidal.helpers import login_required
 from mopidy_tidal.models import lookup_uri, model_factory_map
 from mopidy_tidal.uri import URI, URIType
 
@@ -54,6 +55,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
 
     # -- list / browse ----------------------------------------------------
 
+    @login_required([])
     @cachedmethod(lambda self: self.__as_list_cache)
     def as_list(self) -> list[Ref]:
         session = self.backend.session

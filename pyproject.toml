@@ -26,6 +26,7 @@ dependencies = [
     "cachetools >= 5.3",
     "Mopidy >= 3.0",
     "requests >= 2.31",
+    "tenacity>=8.0",
     "tidalapi[drm] @ git+https://github.com/quodrum-glas/python-tidal.git",
 ]
 

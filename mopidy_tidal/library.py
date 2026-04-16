@@ -8,11 +8,12 @@ from mopidy import backend
 from mopidy.models import Ref, SearchResult
 
 from mopidy_tidal.display import tidal_item
+from mopidy_tidal.helpers import login_required
 from mopidy_tidal.models import lookup_uri, model_factory_map
 from mopidy_tidal.search import tidal_search
 from mopidy_tidal.uri import URI, URIType
 
-from tidalapi.exceptions import NotFoundError, RateLimitError, TidalError
+from tidalapi.exceptions import NotFoundError, TidalError
 
 _ARTIST_FIELDS = frozenset({"artist", "albumartist", "performer", "composer"})
 
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 class TidalLibraryProvider(backend.LibraryProvider):
     root_directory = Ref.directory(uri=str(URI(URIType.DIRECTORY)), name="Tidal")
 
+    @login_required([])
     def get_distinct(self, field: str, query: dict | None = None) -> list[str]:
         logger.debug("get_distinct field=%s query=%r", field, query)
         session = self.backend.session
@@ -52,6 +54,9 @@ class TidalLibraryProvider(backend.LibraryProvider):
             return [tidal_item(t.name) for t in results.get("tracks", [])]
         return []
 
+    @login_required(
+        lambda b: [Ref.directory(uri="tidal:directory", name=f"Visit {b._login_url} to log in")]
+    )
     def browse(self, uri: str) -> list[Ref]:
         logger.debug("TidalLibraryProvider.browse %s", uri)
         try:
@@ -92,8 +97,9 @@ class TidalLibraryProvider(backend.LibraryProvider):
             return []
         return [item.ref for item in model.items()]
 
+    @login_required(SearchResult())
     def search(self, query: dict | None = None, uris: list[str] | None = None, exact: bool = False) -> SearchResult:
-        total = self.backend._config[self.backend.EXT].get("search_result_count", 100)
+        total = self.backend.pagination_max_results
         return SearchResult(**tidal_search(
             self.backend.session, query=query, total=total, exact=exact,
         ))

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, cast
 from cachetools import TTLCache, cachedmethod
 from mopidy.backend import PlaybackProvider
 
+from mopidy_tidal.drm import decrypt_stream
 from mopidy_tidal.helpers import backoff_on_error
 from mopidy_tidal.uri import URI
 
@@ -32,8 +33,8 @@ class TidalPlaybackProvider(PlaybackProvider):
     @backoff_on_error(seconds=5.0)
     def translate_uri(self, uri: str) -> str | None:
         track_id = URI.from_string(uri).track
+        logger.debug("Playback: fetching stream for track=%s", track_id)
         stream = self.backend.session.get_stream(track_id, self.backend.quality)
-
         logger.debug(
             "Playback: track=%s quality=%s codec=%s %dbit/%dHz drm=%s",
             track_id, stream.audio_quality, stream.codec,
@@ -54,10 +55,12 @@ class TidalPlaybackProvider(PlaybackProvider):
 
     def _translate_drm(self, stream) -> str | None:
         """Decrypt Widevine DASH stream and return HTTP URL for GStreamer."""
-        from mopidy_tidal.drm import decrypt_stream
-
+        logger.info("DRM[%s]: Requesting keys...", stream.track_id)
         keys = self.backend.session.get_decryption_keys(stream)
-        return decrypt_stream(stream, keys)
+        logger.info("DRM[%s]: Key exchange complete", stream.track_id)
+        url = decrypt_stream(stream, keys, server=self.backend.drm_server)
+
+        return url
 
     def _translate_mpd(self, stream) -> str | None:
         mpd_xml = stream.get_manifest_data()

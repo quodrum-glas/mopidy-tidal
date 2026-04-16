@@ -32,11 +32,14 @@ class Extension(ext.Extension):
             optional=True,
             choices=chain(range(10, 60, 10), range(60, 600, 60), range(600, 3601, 600)),
         )
-        schema["search_result_count"] = config.Integer(
+        schema["pagination_max_results"] = config.Integer(
             optional=True,
-            choices=range(0, 201, 50),
+            choices=range(20, 101, 20),
         )
-        schema["login_web_port"] = config.Integer(optional=True, choices=range(8000, 9000))
+        schema["login_web_port"] = config.Integer(optional=True, minimum=8000, maximum=8999)
+        schema["http_timeout"] = config.Pair(
+            optional=True, separator=",", subtypes=(config.Float(), config.Float()),
+        )
         return schema
 
     def setup(self, registry: ext.Registry) -> None:

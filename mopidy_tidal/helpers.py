@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import socket
 import time
 from functools import wraps
 from typing import Any
@@ -64,3 +65,29 @@ def try_or_none(call: object, *args: Any, **kwargs: Any) -> Any:
 
 def return_none(*args: Any, **kwargs: Any) -> None:
     return None
+
+
+def login_required(fallback):
+    """Decorator: return *fallback* immediately if provider.backend.logged_in is False."""
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(provider, *args, **kwargs):
+            if not provider.backend.logged_in:
+                return fallback(provider.backend) if callable(fallback) else fallback
+            return fn(provider, *args, **kwargs)
+        return wrapper
+    return decorator
+
+
+from tenacity import retry, stop_after_delay, wait_fixed
+
+
+@retry(stop=stop_after_delay(60), wait=wait_fixed(1))
+def local_ip() -> str:
+    """Return the local IP. Retries for up to 60s, then raises."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))
+        return s.getsockname()[0]
+    finally:
+        s.close()

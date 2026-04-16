@@ -1,18 +1,26 @@
 from __future__ import annotations
 
-"""DRM playback: mp4decrypt per-segment, local DASH server for GStreamer."""
+"""DRM playback: stateless decrypting reverse proxy for GStreamer."""
 
 import logging
-import subprocess
-import tempfile
 import threading
 import xml.etree.ElementTree as ET
+from functools import partial
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from pathlib import Path
-from typing import TYPE_CHECKING, Callable
-from urllib.parse import urlparse
+from typing import TYPE_CHECKING
 
 import requests
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_full_jitter,
+)
+from urllib3.exceptions import ResponseError
+
+from tidalapi.http import TTLRequestsSessionManager
+from tidalapi.mp4decrypt import EncryptionParams, decrypt_init, decrypt_segment
 
 if TYPE_CHECKING:
     from tidalapi.api.stream import StreamInfo
@@ -20,191 +28,181 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _NS = {"mpd": "urn:mpeg:dash:schema:mpd:2011"}
+_HEADERS_MPD = {"Content-Type": "application/dash+xml", "Cache-Control": "max-age=31536000"}
+_HEADERS_SEGMENT = {"Content-Type": "audio/mp4"}
 
 
-def _mp4decrypt(
-    data: bytes, kid: str, key: str, init_data: bytes | None = None,
-) -> bytes:
-    """Decrypt bytes via mp4decrypt."""
-    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
-        f.write(data)
-        enc = Path(f.name)
-    dec = enc.with_suffix(".dec.mp4")
-    init_file: Path | None = None
-    try:
-        cmd = ["mp4decrypt", "--key", f"{kid}:{key}"]
-        if init_data:
-            init_file = enc.with_suffix(".init.mp4")
-            init_file.write_bytes(init_data)
-            cmd += ["--fragments-info", str(init_file)]
-        cmd += [str(enc), str(dec)]
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        if r.returncode != 0:
-            raise RuntimeError(f"mp4decrypt failed: {r.stderr}")
-        return dec.read_bytes()
-    finally:
-        enc.unlink(missing_ok=True)
-        dec.unlink(missing_ok=True)
-        if init_file:
-            init_file.unlink(missing_ok=True)
+def _rewrite_mpd(mpd_xml: str, proxy_prefix: str, representation_id: str) -> tuple[str, str]:
+    """Strip DRM, keep one Representation, replace https:// with proxy_prefix.
 
-
-def _strip_mpd_to_single_rep(mpd_xml: str, preferred_codec: str = "flac") -> str:
-    """Remove all but the preferred Representation from the MPD.
-
-    Also strips ContentProtection elements so dashdemux doesn't think
-    the stream is encrypted.
+    Returns (patched_mpd_xml, init_path).
     """
     root = ET.fromstring(mpd_xml)
+    init_path = ""
     for adapt in root.findall(".//mpd:AdaptationSet", _NS):
-        # Remove ContentProtection
         for cp in adapt.findall("mpd:ContentProtection", _NS):
             adapt.remove(cp)
-
-        # Keep only the preferred representation
         reps = adapt.findall("mpd:Representation", _NS)
-        best = reps[0]
-        for r in reps:
-            codecs = (r.get("codecs", "") + r.get("id", "")).lower()
-            if preferred_codec in codecs:
-                best = r
-                break
+        best = next((r for r in reps if r.get("id") == representation_id), None)
+        if best is None:
+            raise ValueError(
+                f"Representation '{representation_id}' not found "
+                f"(available: {[r.get('id') for r in reps]})"
+            )
         for r in reps:
             if r is not best:
                 adapt.remove(r)
+            else:
+                for seg in r.findall("mpd:SegmentTemplate", _NS):
+                    for attr in ("initialization", "media"):
+                        val = seg.get(attr)
+                        if val is None:
+                            raise ValueError(f"SegmentTemplate missing '{attr}'")
+                        seg.set(attr, val.replace("https://", proxy_prefix, 1))
+                        if attr == "initialization":
+                            init_path = val
+    ET.register_namespace("", _NS["mpd"])
+    return ET.tostring(root, encoding="unicode", xml_declaration=True), init_path
 
-    ET.register_namespace("", "urn:mpeg:dash:schema:mpd:2011")
-    return ET.tostring(root, encoding="unicode", xml_declaration=True)
 
+# ---------------------------------------------------------------------------
+# Handler
+# ---------------------------------------------------------------------------
 
-class _DashServer:
-    """Minimal HTTP server that resolves request paths to bytes via a callback."""
+class _Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
 
-    def __init__(self, resolver: Callable[[str], bytes | None]) -> None:
-        self._resolver = resolver
-        server = self
+    def __init__(self, server: DrmServer, *args: object, **kwargs: object) -> None:
+        self.drm = server
+        super().__init__(*args, **kwargs)
 
-        class Handler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:
-                path = self.path.split("?")[0]
-                data = server._resolver(path)
-                if data is None:
-                    self._send(b"Not found", "text/plain", 404)
-                else:
-                    ct = "application/dash+xml" if path.endswith(".mpd") else "audio/mp4"
-                    self._send(data, ct)
+    def do_GET(self) -> None:
+        path = self.path
+        if self.drm.mpd and path.endswith("/manifest.mpd"):
+            self._reply(self.drm.mpd, _HEADERS_MPD)
+            return
+        try:
+            data = self.drm.decrypt(path)
+        except (requests.exceptions.RequestException, ResponseError):
+            logger.warning("%s -> 503", path.rsplit("/", 1)[-1])
+            self._reply(b"Service unavailable", code=503, hdrs={"Retry-After": "2"})
+            return
+        except Exception:
+            logger.exception("%s -> 502", path.rsplit("/", 1)[-1])
+            self._reply(b"Bad gateway", code=502)
+            return
+        self._reply(data, _HEADERS_SEGMENT)
 
-            do_HEAD = do_GET
+    do_HEAD = do_GET
 
-            def _send(self, data: bytes, ct: str, code: int = 200) -> None:
-                self.send_response(code)
-                self.send_header("Content-Type", ct)
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                if self.command != "HEAD":
-                    try:
-                        self.wfile.write(data)
-                    except (BrokenPipeError, ConnectionResetError):
-                        pass
-
-            def log_message(self, *a) -> None:
+    def _reply(
+        self, data: bytes, hdrs: dict[str, str] | None = None, code: int = 200,
+    ) -> None:
+        self.send_response(code)
+        for k, v in (hdrs or {"Content-Type": "text/plain"}).items():
+            self.send_header(k, v)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        if self.command != "HEAD":
+            try:
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError):
                 pass
 
-        self._http = HTTPServer(("127.0.0.1", 0), Handler)
-        self.port = self._http.server_address[1]
-        self.base_url = f"http://127.0.0.1:{self.port}"
+    def log_message(self, *a) -> None:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Server
+# ---------------------------------------------------------------------------
+
+class DrmServer(HTTPServer):
+    """Decrypting reverse proxy server.
+
+    URL path mirrors the upstream CDN path. key_hex is stored on the server.
+    On GET: reconstruct https:/{path}, fetch, decrypt, return.
+    """
+
+    def __init__(self, http_timeout: tuple[float, float]) -> None:
+        self.http = TTLRequestsSessionManager(
+            timeout=http_timeout,
+            pool_connections=2,
+            pool_maxsize=4,
+        )
+        self.mpd: bytes = b""
+        self.init_params: EncryptionParams | None = None
+        self.key_hex: str = ""
+        self.init_path: str = ""
+        self._stop = threading.Event()
+        handler = partial(_Handler, self)
+        super().__init__(("127.0.0.1", 0), handler)
+        host, port = self.server_address
+        self.base_url = f"http://{host}:{port}"
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_full_jitter(max=2),
+        retry=retry_if_exception_type((requests.exceptions.RequestException, ResponseError)),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def fetch(self, url: str) -> bytes:
+        logger.debug("fetch %s", url)
+        r = self.http.get(url)
+        r.raise_for_status()
+        return r.content
+
+    def decrypt(self, path: str) -> bytes:
+        upstream = f"https:/{path}"
+        if upstream == self.init_path:
+            if not self.init_params:
+                raw = self.fetch(upstream)
+                self.init_params = decrypt_init(raw, self.key_hex)
+            return self.init_params.clean_init
+
+        raw = self.fetch(upstream)
+        return decrypt_segment(raw, self.init_params)
+
+    def reset(self, mpd_xml: str, key_hex: str, representation_id: str) -> str:
+        """Configure for a new track. Returns the local MPD URL."""
+        prefix = f"{self.base_url}/"
+        patched, self.init_path = _rewrite_mpd(mpd_xml, prefix, representation_id)
+        self.mpd = patched.encode()
+        self.init_params = None
+        self.key_hex = key_hex
+        return f"{self.base_url}/manifest.mpd"
 
     def start(self) -> None:
         threading.Thread(
-            target=self._http.serve_forever, name="mopidy-tidal-drm-http", daemon=True,
+            target=self._serve, name="TidalDrmProxy", daemon=True,
         ).start()
+        logger.debug("proxy on %s", self.base_url)
 
-    def shutdown_later(self, seconds: int = 600) -> None:
-        def _stop() -> None:
-            import time
-            time.sleep(seconds)
-            self._http.shutdown()
+    def _serve(self) -> None:
+        self.timeout = 0.5
+        while not self._stop.is_set():
+            self.handle_request()
+        self.server_close()
 
-        threading.Thread(target=_stop, name="mopidy-tidal-drm-stop", daemon=True).start()
+    def shutdown(self) -> None:
+        self.http.close()
+        self._stop.set()
 
 
-def decrypt_stream(stream: StreamInfo, keys: list[tuple[str, str]]) -> str:
-    """Start a local DASH server serving decrypted segments.
-
-    Returns an http:// URL to the patched MPD. GStreamer's dashdemux requests
-    init + segments on demand — seeking and progressive playback work natively.
-    """
+def decrypt_stream(
+    stream: StreamInfo,
+    keys: list[tuple[str, str]],
+    server: DrmServer,
+) -> str:
+    """Return a local URL to a patched MPD proxied through the DRM server."""
     if not keys:
         raise RuntimeError(f"No content keys for track {stream.track_id}")
-
-    kid, key_hex = keys[0]
+    if not stream.representation_id:
+        raise RuntimeError(f"No representation ID for track {stream.track_id}")
     mpd_xml = stream.get_manifest_data()
     if not mpd_xml:
         raise RuntimeError(f"No MPD manifest for track {stream.track_id}")
 
-    cache: dict[str, bytes] = {}
-    lock = threading.Lock()
-    init_enc: list[bytes] = []
-    init_ready = threading.Event()
-
-    # Build path -> URL map from stream.init_url and stream.urls
-    url_map: dict[str, str] = {}
-    if stream.init_url:
-        url_map[urlparse(stream.init_url).path] = stream.init_url
-    for url in stream.urls:
-        url_map[urlparse(url).path] = url
-
-    def _prefetch() -> None:
-        # Init segment
-        if stream.init_url:
-            resp = requests.get(stream.init_url)
-            resp.raise_for_status()
-            init_enc.append(resp.content)
-            path = urlparse(stream.init_url).path
-            cache[path] = _mp4decrypt(resp.content, kid, key_hex)
-        init_ready.set()
-
-        # All media segments (parallel download)
-        from concurrent.futures import ThreadPoolExecutor
-
-        def _fetch(item: tuple[str, str]) -> tuple[str, bytes]:
-            path, url = item
-            r = requests.get(url)
-            r.raise_for_status()
-            return path, r.content
-
-        seg_items = [(urlparse(u).path, u) for u in stream.urls]
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            for path, enc in pool.map(_fetch, seg_items):
-                dec = _mp4decrypt(enc, kid, key_hex, init_enc[0] if init_enc else None)
-                with lock:
-                    cache[path] = dec
-
-        logger.debug("DRM: cached all %d segments for track %s", len(stream.urls), stream.track_id)
-
-    def _resolve(path: str) -> bytes | None:
-        if path == "/manifest.mpd":
-            return cache.get("/manifest.mpd")
-        init_ready.wait(timeout=15)
-        with lock:
-            return cache.get(path)
-
-    server = _DashServer(_resolve)
-
-    # Strip MPD to single representation and rewrite origin
-    quality = stream.audio_quality or ""
-    preferred = "flac" if "LOSSLESS" in quality else ""
-    patched = _strip_mpd_to_single_rep(mpd_xml, preferred)
-    if stream.urls:
-        p = urlparse(stream.urls[0])
-        patched = patched.replace(f"{p.scheme}://{p.netloc}", server.base_url)
-    cache["/manifest.mpd"] = patched.encode()
-
-    threading.Thread(target=_prefetch, name="mopidy-tidal-drm-init", daemon=True).start()
-    server.start()
-    server.shutdown_later()
-
-    init_ready.wait(timeout=15)
-    url = f"{server.base_url}/manifest.mpd"
-    logger.debug("DRM: serving track %s at %s", stream.track_id, url)
-    return url
+    _, key_hex = keys[0]
+    return server.reset(mpd_xml, key_hex, stream.representation_id)

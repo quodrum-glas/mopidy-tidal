@@ -22,6 +22,7 @@ def create_session(
     token_file: str | Path | None = None,
     widevine_cdm_path: Path | None = None,
     fetch_album_covers: bool,
+    http_timeout: tuple[float, float],
 ) -> Session:
     """Create a tidalapi Session from mopidy config values.
 
@@ -34,6 +35,7 @@ def create_session(
         quality=quality,
         widevine_cdm_path=widevine_cdm_path,
         fetch_album_covers=fetch_album_covers,
+        http_timeout=http_timeout,
     )
     if token_file:
         try:

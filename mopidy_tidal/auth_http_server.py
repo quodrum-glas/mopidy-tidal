@@ -38,26 +38,28 @@ INTERACTIVE_HTML_BODY = """
 def start_oauth_daemon(
     session: Session,
     port: int,
-    login_result: Queue[Exception | None],
-) -> None:
-    handler = partial(HTTPHandler, session, login_result)
+    on_login: Queue[bool],
+) -> HTTPServer:
+    login_handler = LoginHandler(session, on_login)
+    handler = partial(HTTPHandler, login_handler)
+    server = HTTPServer(("", port), handler)
     threading.Thread(
         name="TidalOAuthLogin",
-        target=HTTPServer(("", port), handler).serve_forever,
+        target=server.serve_forever,
         daemon=True,
     ).start()
+    return server
 
 
 class HTTPHandler(BaseHTTPRequestHandler):
 
     def __init__(
         self,
-        session: Session,
-        login_result_holder: Queue[Exception | None],
+        login_handler: LoginHandler,
         *args: object,
         **kwargs: object,
     ) -> None:
-        self.login_handler = LoginHandler(session, login_result_holder)
+        self.login_handler = login_handler
         super().__init__(*args, **kwargs)
 
     def do_GET(self) -> None:
@@ -92,10 +94,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
 
 class LoginHandler:
-    def __init__(self, session: Session, login_result_holder: Queue[Exception | None]) -> None:
+    def __init__(self, session: Session, on_login: Queue[bool]) -> None:
         self._session = session
-        self._login_result_holder = login_result_holder
+        self._on_login = on_login
         self.is_pkce: bool = session.is_pkce
+        self._login_url: str | None = None
 
     def _login_oauth(self) -> str:
         login, future = self._session.login_oauth()
@@ -106,13 +109,15 @@ class LoginHandler:
         return self._session.pkce_login_url()
 
     def get_login_url(self) -> str:
-        return self._login_pkce() if self.is_pkce else self._login_oauth()
+        if self._login_url is None:
+            self._login_url = self._login_pkce() if self.is_pkce else self._login_oauth()
+        return self._login_url
 
     def set_login_result(self, data: str | Exception | None) -> None:
         if self.is_pkce:
             try:
                 self._session.complete_pkce_login(data)
-                data = None
-            except Exception as e:
-                data = e
-        self._login_result_holder.put(data)
+            except Exception:
+                self._login_url = None
+                raise
+        self._on_login.put(True)
