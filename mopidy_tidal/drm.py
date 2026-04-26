@@ -144,7 +144,7 @@ class DrmServer(HTTPServer):
         stop=stop_after_attempt(3),
         wait=wait_full_jitter(max=2),
         retry=retry_if_exception_type((requests.exceptions.RequestException, ResponseError)),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
+        before_sleep=before_sleep_log(logger, logging.DEBUG),
         reraise=True,
     )
     def fetch(self, url: str) -> bytes:
