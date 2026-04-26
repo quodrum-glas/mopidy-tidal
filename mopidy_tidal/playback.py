@@ -55,9 +55,9 @@ class TidalPlaybackProvider(PlaybackProvider):
 
     def _translate_drm(self, stream) -> str | None:
         """Decrypt Widevine DASH stream and return HTTP URL for GStreamer."""
-        logger.info("DRM[%s]: Requesting keys...", stream.track_id)
+        logger.debug("DRM[%s]: Requesting keys...", stream.track_id)
         keys = self.backend.session.get_decryption_keys(stream)
-        logger.info("DRM[%s]: Key exchange complete", stream.track_id)
+        logger.debug("DRM[%s]: Key exchange complete", stream.track_id)
         url = decrypt_stream(stream, keys, server=self.backend.drm_server)
 
         return url
