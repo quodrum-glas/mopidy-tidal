@@ -19,7 +19,7 @@ from tenacity import (
 )
 from urllib3.exceptions import ResponseError
 
-from tidalapi.http import TTLRequestsSessionManager
+from tidalapi.http import TidalRequestsSession
 from tidalapi.mp4decrypt import EncryptionParams, decrypt_init, decrypt_segment
 
 if TYPE_CHECKING:
@@ -125,7 +125,7 @@ class DrmServer(HTTPServer):
     """
 
     def __init__(self, http_timeout: tuple[float, float]) -> None:
-        self.http = TTLRequestsSessionManager(
+        self.http = TidalRequestsSession(
             timeout=http_timeout,
             pool_connections=2,
             pool_maxsize=4,
