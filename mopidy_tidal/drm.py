@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 import threading
-import xml.etree.ElementTree as ET
 from collections import OrderedDict
 from functools import partial
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import TYPE_CHECKING
 
 import requests
+from mpegdash.parser import MPEGDASHParser
 from tenacity import (
     before_sleep_log,
     retry,
@@ -24,34 +24,45 @@ from tidalapi.http import TidalRequestsSession
 from tidalapi.mp4decrypt import EncryptionParams, decrypt_init, decrypt_segment
 
 if TYPE_CHECKING:
-    from tidalapi.api.stream import MpdInfo, StreamInfo
+    from mpegdash.nodes import MPEGDASH, Representation
+    from tidalapi.api.stream import StreamInfo
 
 logger = logging.getLogger(__name__)
 
-_NS = {"mpd": "urn:mpeg:dash:schema:mpd:2011"}
 _HEADERS_MPD = {"Content-Type": "application/dash+xml", "Cache-Control": "max-age=31536000"}
 _HEADERS_SEGMENT = {"Content-Type": "audio/mp4"}
 
 
-def _rewrite_mpd(mpd_xml: str, proxy_prefix: str, selected_rep_ids: set[str]) -> str:
+def _seg_urls(rep: Representation) -> tuple[str, set[str]]:
+    """Extract (init_url, {media_urls}) from a Representation's SegmentTemplate."""
+    st = rep.segment_templates[0]
+    start = int(st.start_number)
+    count = sum(1 + int(s.r or 0) for s in st.segment_timelines[0].Ss)
+    return (
+        st.initialization,
+        {st.media.replace("$Number$", str(i)) for i in range(start, start + count)},
+    )
+
+
+def _generate_mpd_xml(mpd: MPEGDASH, proxy_prefix: str, selected_rep_ids: set[str]) -> str:
     """Strip ContentProtection, keep selected Representations, proxy its URLs."""
-    root = ET.fromstring(mpd_xml)
-    for adapt in root.findall(".//mpd:AdaptationSet", _NS):
-        for cp in adapt.findall("mpd:ContentProtection", _NS):
-            adapt.remove(cp)
-        for rep in adapt.findall("mpd:Representation", _NS):
-            if rep.get("id") not in selected_rep_ids:
-                adapt.remove(rep)
-                continue
-            logger.debug(f"Representation served: {rep.get('id')}")
-            for seg in rep.findall("mpd:SegmentTemplate", _NS):
-                for attr in ("initialization", "media"):
-                    val = seg.get(attr)
-                    if val is None:
-                        raise ValueError(f"SegmentTemplate missing '{attr}'")
-                    seg.set(attr, val.replace("https://", proxy_prefix, 1))
-    ET.register_namespace("", _NS["mpd"])
-    return ET.tostring(root, encoding="unicode", xml_declaration=True)
+    mpd = MPEGDASHParser.parse(mpd.xml)
+    for period in mpd.periods:
+        for adapt in period.adaptation_sets:
+            adapt.content_protections = None
+            adapt.representations = [
+                r for r in adapt.representations if r.id in selected_rep_ids
+            ]
+            for rep in adapt.representations:
+                logger.debug(f"Representation served: {rep.id}")
+                for seg in rep.segment_templates or []:
+                    if seg.initialization is None or seg.media is None:
+                        raise ValueError("SegmentTemplate missing 'initialization' or 'media'")
+                    seg.initialization = seg.initialization.replace(
+                        "https://", proxy_prefix, 1
+                    )
+                    seg.media = seg.media.replace("https://", proxy_prefix, 1)
+    return MPEGDASHParser.get_as_doc(mpd).toxml()
 
 
 # ---------------------------------------------------------------------------
@@ -164,16 +175,17 @@ class DrmServer(HTTPServer):
 
         raise RuntimeError(f"Unknown URL: {upstream}")
 
-    def reset(self, mpd: MpdInfo, key_hex: str) -> str:
+    def reset(self, mpd: MPEGDASH, key_hex: str) -> str:
         """Configure for a new track. Returns the local MPD URL."""
-        prefix = f"{self.base_url}/"
-        # Adaptive representations not handled by gstreamer:
-        # mopidy.audio.gst: GStreamer error: Internal data stream error
-        reprs = mpd.representations[:1] # Force highest quality available as requested by playback
-        self.mpd_bytes = _rewrite_mpd(mpd.xml, prefix, {r.id for r in reprs}).encode()
-        self._reprs = OrderedDict(
-            (r.init_url, (set(r.urls), None)) for r in reprs
-        )
+        self._reprs = OrderedDict()
+        repr_ids = set()
+        # Adaptive representations not handled by gstreamer as may need to switch codec mid-track play
+        # We will enforce the highest quality available as per user configuration
+        for r in mpd.periods[0].adaptation_sets[0].representations[:1]:
+            init_url, media_urls = _seg_urls(r)
+            self._reprs[init_url] = (media_urls, None)
+            repr_ids.add(r.id)
+        self.mpd_bytes = _generate_mpd_xml(mpd, f"{self.base_url}/", repr_ids).encode()
         self.key_hex = key_hex
         return f"{self.base_url}/manifest.mpd"
 
