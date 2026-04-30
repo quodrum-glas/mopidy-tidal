@@ -36,9 +36,8 @@ class TidalPlaybackProvider(PlaybackProvider):
         logger.debug("Playback: fetching stream for track=%s", track_id)
         stream = self.backend.session.get_stream(track_id, self.backend.quality)
         logger.debug(
-            "Playback: track=%s quality=%s codec=%s %dbit/%dHz drm=%s",
-            track_id, stream.audio_quality, stream.codec,
-            stream.bit_depth, stream.sample_rate, stream.drm_system or "none",
+            "Playback: track=%s mime=%s drm=%s",
+            track_id, stream.manifest_mime_type, stream.drm_system or "none",
         )
 
         if stream.is_drm:
@@ -63,20 +62,18 @@ class TidalPlaybackProvider(PlaybackProvider):
         return url
 
     def _translate_mpd(self, stream) -> str | None:
-        mpd_xml = stream.get_manifest_data()
-        if not mpd_xml:
+        if not stream.mpd:
             raise ValueError("No MPD manifest available")
         mpd_path = Path(
             self.backend.cache_dir,
             f"manifest_{self.n % self.MAX_CACHE_MANIFEST_FILES}.mpd",
         )
-        mpd_path.write_text(mpd_xml)
+        mpd_path.write_text(stream.mpd.xml)
         self.n += 1
         return f"file://{mpd_path}"
 
     def _translate_bts(self, stream) -> str | None:
-        manifest = stream.get_stream_manifest()
-        if manifest:
-            urls = manifest.get_urls()
+        if stream.bts:
+            urls = stream.bts.get_urls()
             return urls[0] if urls else None
         return None

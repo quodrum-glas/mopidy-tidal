@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import xml.etree.ElementTree as ET
+from collections import OrderedDict
 from functools import partial
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import TYPE_CHECKING
@@ -23,7 +24,7 @@ from tidalapi.http import TidalRequestsSession
 from tidalapi.mp4decrypt import EncryptionParams, decrypt_init, decrypt_segment
 
 if TYPE_CHECKING:
-    from tidalapi.api.stream import StreamInfo
+    from tidalapi.api.stream import MpdInfo, StreamInfo
 
 logger = logging.getLogger(__name__)
 
@@ -32,37 +33,25 @@ _HEADERS_MPD = {"Content-Type": "application/dash+xml", "Cache-Control": "max-ag
 _HEADERS_SEGMENT = {"Content-Type": "audio/mp4"}
 
 
-def _rewrite_mpd(mpd_xml: str, proxy_prefix: str, representation_id: str) -> tuple[str, str]:
-    """Strip DRM, keep one Representation, replace https:// with proxy_prefix.
-
-    Returns (patched_mpd_xml, init_path).
-    """
+def _rewrite_mpd(mpd_xml: str, proxy_prefix: str, selected_rep_ids: set[str]) -> str:
+    """Strip ContentProtection, keep selected Representations, proxy its URLs."""
     root = ET.fromstring(mpd_xml)
-    init_path = ""
     for adapt in root.findall(".//mpd:AdaptationSet", _NS):
         for cp in adapt.findall("mpd:ContentProtection", _NS):
             adapt.remove(cp)
-        reps = adapt.findall("mpd:Representation", _NS)
-        best = next((r for r in reps if r.get("id") == representation_id), None)
-        if best is None:
-            raise ValueError(
-                f"Representation '{representation_id}' not found "
-                f"(available: {[r.get('id') for r in reps]})"
-            )
-        for r in reps:
-            if r is not best:
-                adapt.remove(r)
-            else:
-                for seg in r.findall("mpd:SegmentTemplate", _NS):
-                    for attr in ("initialization", "media"):
-                        val = seg.get(attr)
-                        if val is None:
-                            raise ValueError(f"SegmentTemplate missing '{attr}'")
-                        seg.set(attr, val.replace("https://", proxy_prefix, 1))
-                        if attr == "initialization":
-                            init_path = val
+        for rep in adapt.findall("mpd:Representation", _NS):
+            if rep.get("id") not in selected_rep_ids:
+                adapt.remove(rep)
+                continue
+            logger.debug(f"Representation served: {rep.get('id')}")
+            for seg in rep.findall("mpd:SegmentTemplate", _NS):
+                for attr in ("initialization", "media"):
+                    val = seg.get(attr)
+                    if val is None:
+                        raise ValueError(f"SegmentTemplate missing '{attr}'")
+                    seg.set(attr, val.replace("https://", proxy_prefix, 1))
     ET.register_namespace("", _NS["mpd"])
-    return ET.tostring(root, encoding="unicode", xml_declaration=True), init_path
+    return ET.tostring(root, encoding="unicode", xml_declaration=True)
 
 
 # ---------------------------------------------------------------------------
@@ -78,8 +67,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = self.path
-        if self.drm.mpd and path.endswith("/manifest.mpd"):
-            self._reply(self.drm.mpd, _HEADERS_MPD)
+        if path.endswith("/manifest.mpd"):
+            self._reply(self.drm.mpd_bytes, _HEADERS_MPD)
             return
         try:
             data = self.drm.decrypt(path)
@@ -122,6 +111,7 @@ class DrmServer(HTTPServer):
 
     URL path mirrors the upstream CDN path. key_hex is stored on the server.
     On GET: reconstruct https:/{path}, fetch, decrypt, return.
+    GStreamer picks the representation; we decrypt whatever it requests.
     """
 
     def __init__(self, http_timeout: tuple[float, float]) -> None:
@@ -130,10 +120,10 @@ class DrmServer(HTTPServer):
             pool_connections=2,
             pool_maxsize=4,
         )
-        self.mpd: bytes = b""
-        self.init_params: EncryptionParams | None = None
+        self.mpd_bytes: bytes = b""
+        # init_url → (media_urls_set, cached_params) — ordered by bandwidth
+        self._reprs: OrderedDict[str, tuple[set[str], EncryptionParams | None]] = OrderedDict()
         self.key_hex: str = ""
-        self.init_path: str = ""
         self._stop = threading.Event()
         handler = partial(_Handler, self)
         super().__init__(("127.0.0.1", 0), handler)
@@ -153,23 +143,37 @@ class DrmServer(HTTPServer):
         r.raise_for_status()
         return r.content
 
+    def _get_params(self, init_url: str) -> EncryptionParams:
+        urls, params = self._reprs[init_url]
+        if not params:
+            raw = self.fetch(init_url)
+            params = decrypt_init(raw, self.key_hex)
+            self._reprs[init_url] = (urls, params)
+        return params
+
     def decrypt(self, path: str) -> bytes:
         upstream = f"https:/{path}"
-        if upstream == self.init_path:
-            if not self.init_params:
+
+        for init_url, (media_urls, _) in self._reprs.items():
+            params = self._get_params(init_url)
+            if upstream == init_url:
+                return params.clean_init
+            if upstream in media_urls:
                 raw = self.fetch(upstream)
-                self.init_params = decrypt_init(raw, self.key_hex)
-            return self.init_params.clean_init
+                return decrypt_segment(raw, params)
 
-        raw = self.fetch(upstream)
-        return decrypt_segment(raw, self.init_params)
+        raise RuntimeError(f"Unknown URL: {upstream}")
 
-    def reset(self, mpd_xml: str, key_hex: str, representation_id: str) -> str:
+    def reset(self, mpd: MpdInfo, key_hex: str) -> str:
         """Configure for a new track. Returns the local MPD URL."""
         prefix = f"{self.base_url}/"
-        patched, self.init_path = _rewrite_mpd(mpd_xml, prefix, representation_id)
-        self.mpd = patched.encode()
-        self.init_params = None
+        # Adaptive representations not handled by gstreamer:
+        # mopidy.audio.gst: GStreamer error: Internal data stream error
+        reprs = mpd.representations[:1] # Force highest quality available as requested by playback
+        self.mpd_bytes = _rewrite_mpd(mpd.xml, prefix, {r.id for r in reprs}).encode()
+        self._reprs = OrderedDict(
+            (r.init_url, (set(r.urls), None)) for r in reprs
+        )
         self.key_hex = key_hex
         return f"{self.base_url}/manifest.mpd"
 
@@ -195,14 +199,11 @@ def decrypt_stream(
     keys: list[tuple[str, str]],
     server: DrmServer,
 ) -> str:
-    """Return a local URL to a patched MPD proxied through the DRM server."""
+    """Return a local URL to a cleaned MPD proxied through the DRM server."""
     if not keys:
         raise RuntimeError(f"No content keys for track {stream.track_id}")
-    if not stream.representation_id:
-        raise RuntimeError(f"No representation ID for track {stream.track_id}")
-    mpd_xml = stream.get_manifest_data()
-    if not mpd_xml:
+    if not stream.mpd:
         raise RuntimeError(f"No MPD manifest for track {stream.track_id}")
 
     _, key_hex = keys[0]
-    return server.reset(mpd_xml, key_hex, stream.representation_id)
+    return server.reset(stream.mpd, key_hex)
