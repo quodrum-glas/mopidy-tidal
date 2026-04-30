@@ -63,7 +63,10 @@ class Artist(Model):
         result.extend(self.tracks())
 
         if self.session:
-            result.extend(Album.from_api(a) for a in self.session.get_artist_albums(int(self.api.id)))
+            result.extend(
+                Album.from_api(a)
+                for a in self.session.get_artist_albums(int(self.api.id))
+            )
         else:
             result.extend(Album.from_api(a) for a in self.api.albums)
 
@@ -72,7 +75,10 @@ class Artist(Model):
     def tracks(self, limit: int = 20) -> list[Track]:
         from .track import Track
         if self.session:
-            return [Track.from_api(t) for t in self.session.get_artist_tracks(int(self.api.id), limit=limit)]
+            return [
+                Track.from_api(t)
+                for t in self.session.get_artist_tracks(int(self.api.id), limit=limit)
+            ]
         return [Track.from_api(t) for t in self.api.get_top_tracks(limit=limit)]
 
     @property

@@ -9,6 +9,7 @@ from mopidy_tidal.cache import (
     _items_cache,
     _model_cache,
     cache_by_uri,
+    cache_by_uri_if,
     cache_future,
     cached_by_uri,
     cached_future,
@@ -183,3 +184,35 @@ class TestCacheIsolation:
         assert _model_cache[hash("tidal:track:99")] is m
         assert _futures_cache[hash("tidal:track:99")] is f
         assert m is not f
+
+
+# -- cache_by_uri_if ------------------------------------------------------
+
+class TestCacheByUriIf:
+    def test_caches_when_check_passes(self):
+        @cache_by_uri_if(lambda item: item.ok)
+        def build(api):
+            m = _model("tidal:track:50")
+            m.ok = True
+            return m
+
+        result = build(None)
+        assert _model_cache[hash("tidal:track:50")] is result
+
+    def test_skips_cache_when_check_fails(self):
+        @cache_by_uri_if(lambda item: item.ok)
+        def build(api):
+            m = _model("tidal:track:51")
+            m.ok = False
+            return m
+
+        build(None)
+        assert hash("tidal:track:51") not in _model_cache
+
+    def test_still_returns_result_when_not_cached(self):
+        @cache_by_uri_if(lambda item: False)
+        def build(api):
+            return _model("tidal:track:52")
+
+        result = build(None)
+        assert result.ref.uri == "tidal:track:52"

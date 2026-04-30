@@ -3,10 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from mopidy_tidal.display import (
-    DOWNGRADE,
+    EXCLAMATION,
     FEAT,
-    LOSSLESS,
-    MASTER,
+    HIGH,
+    HIRES,
+    LOW,
     STAR,
     TIDAL,
     WARNING,
@@ -34,25 +35,33 @@ class TestItemBadges:
 
 class TestTrackDisplayName:
     def test_hi_res_lossless(self):
-        t = SimpleNamespace(name="Track", audio_quality="HI_RES_LOSSLESS")
-        assert track_display_name(t) == f"{MASTER} Track"
+        t = SimpleNamespace(name="Track", media_tags=["HI_RES_LOSSLESS"])
+        assert track_display_name(t) == f"{HIRES} Track"
 
-    def test_lossless(self):
-        t = SimpleNamespace(name="Track", audio_quality="LOSSLESS")
-        assert track_display_name(t) == f"{LOSSLESS} Track"
-
-    def test_high_no_badge(self):
-        t = SimpleNamespace(name="Track", audio_quality="HIGH")
+    def test_lossless_no_badge(self):
+        t = SimpleNamespace(name="Track", media_tags=["LOSSLESS"])
         assert track_display_name(t) == "Track"
+
+    def test_high(self):
+        t = SimpleNamespace(name="Track", media_tags=["HIGH"])
+        assert track_display_name(t) == f"{HIGH} Track"
 
     def test_low(self):
-        t = SimpleNamespace(name="Track", audio_quality="LOW")
-        assert track_display_name(t) == f"{DOWNGRADE} Track"
+        t = SimpleNamespace(name="Track", media_tags=["LOW"])
+        assert track_display_name(t) == f"{LOW} Track"
 
-    def test_unknown_quality_no_badge(self):
-        t = SimpleNamespace(name="Track", audio_quality="SOMETHING_ELSE")
-        assert track_display_name(t) == "Track"
+    def test_unknown_quality_exclamation(self):
+        t = SimpleNamespace(name="Track", media_tags=["SOMETHING_ELSE"])
+        assert track_display_name(t) == f"{EXCLAMATION} Track"
 
-    def test_missing_audio_quality(self):
+    def test_missing_media_tags(self):
         t = SimpleNamespace(name="Track")
-        assert track_display_name(t) == "Track"
+        assert track_display_name(t) == f"{EXCLAMATION} Track"
+
+    def test_empty_media_tags(self):
+        t = SimpleNamespace(name="Track", media_tags=[])
+        assert track_display_name(t) == f"{EXCLAMATION} Track"
+
+    def test_multiple_media_tags_picks_longest(self):
+        t = SimpleNamespace(name="Track", media_tags=["LOSSLESS", "HI_RES_LOSSLESS"])
+        assert track_display_name(t) == f"{HIRES} Track"

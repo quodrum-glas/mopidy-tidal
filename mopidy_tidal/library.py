@@ -6,14 +6,13 @@ import logging
 
 from mopidy import backend
 from mopidy.models import Ref, SearchResult
+from tidalapi.exceptions import NotFoundError, TidalError
 
 from mopidy_tidal.display import tidal_item
 from mopidy_tidal.helpers import login_required
 from mopidy_tidal.models import lookup_uri, model_factory_map
 from mopidy_tidal.search import tidal_search
 from mopidy_tidal.uri import URI, URIType
-
-from tidalapi.exceptions import NotFoundError, TidalError
 
 _ARTIST_FIELDS = frozenset({"artist", "albumartist", "performer", "composer"})
 
@@ -98,7 +97,12 @@ class TidalLibraryProvider(backend.LibraryProvider):
         return [item.ref for item in model.items()]
 
     @login_required(SearchResult())
-    def search(self, query: dict | None = None, uris: list[str] | None = None, exact: bool = False) -> SearchResult:
+    def search(
+        self,
+        query: dict | None = None,
+        uris: list[str] | None = None,
+        exact: bool = False,
+    ) -> SearchResult:
         total = self.backend.pagination_max_results
         return SearchResult(**tidal_search(
             self.backend.session, query=query, total=total, exact=exact,

@@ -12,6 +12,7 @@ from mopidy_tidal.playlists import TidalPlaylistsProvider, _empty
 def backend():
     b = MagicMock()
     b.session = MagicMock()
+    b.logged_in = True
     return b
 
 
@@ -141,12 +142,12 @@ class TestCreate:
     def test_creates_and_clears_cache(self, provider, backend):
         api_pl = MagicMock()
         api_pl.id = "new123"
-        backend.session.user.create_playlist.return_value = api_pl
+        backend.session.create_playlist.return_value = api_pl
 
         result = provider.create("My New Playlist")
         assert result.uri == "tidal:playlist:new123"
         assert result.name == "My New Playlist"
-        backend.session.user.create_playlist.assert_called_once_with("My New Playlist")
+        backend.session.create_playlist.assert_called_once_with("My New Playlist")
 
 
 # -- delete ---------------------------------------------------------------
@@ -154,16 +155,15 @@ class TestCreate:
 
 class TestDelete:
     def test_deletes_playlist(self, provider, backend):
-        backend.session.playlist_folders.remove.return_value = True
         ok = provider.delete("tidal:playlist:abc")
         assert ok is True
-        backend.session.playlist_folders.remove.assert_called_once_with(["trn:playlist:abc"])
+        backend.session.delete_playlist.assert_called_once_with("abc")
 
     def test_returns_false_for_non_playlist(self, provider):
         assert provider.delete("tidal:album:123") is False
 
     def test_returns_false_on_api_failure(self, provider, backend):
-        backend.session.playlist_folders.remove.return_value = False
+        backend.session.delete_playlist.side_effect = RuntimeError("fail")
         assert provider.delete("tidal:playlist:abc") is False
 
 
@@ -177,14 +177,64 @@ class TestRefresh:
         assert len(provider._TidalPlaylistsProvider__as_list_cache) == 0
 
 
+# -- as_list --------------------------------------------------------------
+
+
+class TestAsList:
+    def test_returns_refs_from_session(self, provider, backend):
+        mock_pl = MagicMock()
+        mock_pl.id = "pl1"
+        mock_pl.name = "My Playlist"
+        backend.session.get_user_playlists.return_value = [mock_pl]
+
+        with patch("mopidy_tidal.playlists.model_factory_map") as mock_mfm:
+            mock_model = MagicMock()
+            mock_model.ref = Ref.playlist(uri="tidal:playlist:pl1", name="My Playlist")
+            mock_mfm.return_value = iter([mock_model])
+            refs = provider.as_list()
+            # Should include the real playlist + injected playlists
+            assert len(refs) >= 1
+
+
+# -- _create / _add_tracks / _remove_tracks --------------------------------
+
+
+class TestCrudHelpers:
+    def test_create_with_tracks_calls_add(self, provider, backend):
+        api_pl = MagicMock()
+        api_pl.id = "new1"
+        backend.session.create_playlist.return_value = api_pl
+
+        pl = _pl("tidal:playlist:new1", "New", [_track("tidal:track:1")])
+        with patch.object(provider, "_add_tracks") as mock_add:
+            provider._create(pl)
+            mock_add.assert_called_once()
+
+    def test_add_tracks_calls_session(self, provider, backend):
+        provider._add_tracks("tidal:playlist:abc", ["tidal:track:1", "tidal:track:2"])
+        backend.session.add_tracks_to_playlist.assert_called_once_with(
+            "abc", ["1", "2"]
+        )
+
+    def test_remove_tracks_calls_session(self, provider, backend):
+        provider._remove_tracks("tidal:playlist:abc", {"tidal:track:3"})
+        backend.session.remove_tracks_from_playlist.assert_called_once_with(
+            "abc", ["3"]
+        )
+
+
 # -- save (non-injected) --------------------------------------------------
 
 
 class TestSave:
     def test_creates_when_lookup_returns_none(self, provider, backend):
-        with patch.object(provider, "lookup", return_value=None), \
-             patch.object(provider, "_create", return_value=_pl("tidal:playlist:new")) as mock_create:
-            result = provider.save(_pl("tidal:playlist:new", "New"))
+        with (
+            patch.object(provider, "lookup", return_value=None),
+            patch.object(
+                provider, "_create", return_value=_pl("tidal:playlist:new"),
+            ) as mock_create,
+        ):
+            provider.save(_pl("tidal:playlist:new", "New"))
             mock_create.assert_called_once()
 
     def test_adds_new_tracks(self, provider, backend):

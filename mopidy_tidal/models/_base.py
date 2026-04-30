@@ -22,7 +22,14 @@ def _year_from(date_str: str) -> str | None:
 
 
 class Model:
-    def __init__(self, *, ref: MopidyRef, api: object, session: TidalSession | None = None, **kwargs: object) -> None:
+    def __init__(
+        self,
+        *,
+        ref: MopidyRef,
+        api: object,
+        session: TidalSession | None = None,
+        **kwargs: object,
+    ) -> None:
         self.__dict__.update(kwargs)
         self.ref = ref
         self.api = api

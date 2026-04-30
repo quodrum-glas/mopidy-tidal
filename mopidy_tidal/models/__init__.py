@@ -20,23 +20,23 @@ import logging
 from collections.abc import Iterator
 
 from tidalapi import Session as TidalSession
-from tidalapi.models_v1 import (
-    Track as TidalTrackV1,
-    Album as TidalAlbumV1,
-    Artist as TidalArtistV1,
-    Playlist as TidalPlaylistV1,
-    PageItem as TidalPageItemV1,
-    PageLink as TidalPageLinkV1,
-    RoleItem as TidalRoleItemV1,
-    Mix as TidalMixV1,
-    Page as TidalPageV1,
-    Video as TidalVideoV1,
-)
 from tidalapi.models import (
     Album as TidalAlbum,
     Artist as TidalArtist,
-    Track as TidalTrack,
     Playlist as TidalPlaylist,
+    Track as TidalTrack,
+)
+from tidalapi.models_v1 import (
+    Album as TidalAlbumV1,
+    Artist as TidalArtistV1,
+    Mix as TidalMixV1,
+    Page as TidalPageV1,
+    PageItem as TidalPageItemV1,
+    PageLink as TidalPageLinkV1,
+    Playlist as TidalPlaylistV1,
+    RoleItem as TidalRoleItemV1,
+    Track as TidalTrackV1,
+    Video as TidalVideoV1,
 )
 
 from mopidy_tidal.helpers import return_none

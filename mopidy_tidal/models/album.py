@@ -81,7 +81,10 @@ class Album(Model):
     def tracks(self) -> list[Track]:
         from .track import Track
         if self.session:
-            return [Track.from_api(t, album=self) for t in self.session.get_album_tracks(int(self.api.id))]
+            return [
+                Track.from_api(t, album=self)
+                for t in self.session.get_album_tracks(int(self.api.id))
+            ]
         return [Track.from_api(t) for t in self.api.tracks]
 
     @property

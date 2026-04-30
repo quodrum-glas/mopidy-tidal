@@ -18,10 +18,9 @@ from tenacity import (
     stop_after_attempt,
     wait_full_jitter,
 )
-from urllib3.exceptions import ResponseError
-
 from tidalapi.http import TidalRequestsSession
 from tidalapi.mp4decrypt import EncryptionParams, decrypt_init, decrypt_segment
+from urllib3.exceptions import ResponseError
 
 if TYPE_CHECKING:
     from mpegdash.nodes import MPEGDASH, Representation

@@ -26,7 +26,7 @@ First install and configure Mopidy as per the instructions listed [here](https:/
 
 After installing Mopidy, you can now proceed installing the plugins that you require, including Mopidy-Tidal. :
 ```
-python3 -m pip install -U 'git+https://github.com/quodrum-glas/mopidy-tidal.git'
+python3 -m pip install -U 'git+https://github.com/quodrum-glas/mopidy-tidal.git@quodrumglas#egg=Mopidy-Tidal'
 ```
 
 Poetry can also be used to install mopidy-tidal and its dependencies.
@@ -85,9 +85,8 @@ The configuration is usually stored in `/etc/mopidy/mopidy.conf`, depending on y
 enabled = true
 quality = LOSSLESS
 playlist_cache_refresh_secs = 300
-search_result_count = 100
+pagination_max_results = 40
 login_web_port = 8989
-login_pkce = true
 client_id =
 client_secret =
 ```
@@ -101,11 +100,10 @@ sudo systemctl restart mopidy
 The plugin configuration is usually set in your mopidy configuration:
 ```
 [tidal]
-[tidal]
 enabled = true
 quality = LOSSLESS
 playlist_cache_refresh_secs = 300
-search_result_count = 100
+pagination_max_results = 40
 login_web_port = 8989
 client_id =
 client_secret =
@@ -116,9 +114,9 @@ client_secret =
 
 * **playlist_cache_refresh_secs (Optional):** Tells if (and how often) playlist
   content should be refreshed upon lookup.
-    * `0` (default): The default value (`0`) means that playlists won't be refreshed after the
+    * `0`: A value of `0` means that playlists won't be refreshed after the
       extension has started, unless they are explicitly modified from mopidy.
-    * `>0`: A non-zero value expresses for how long (in seconds) a cached playlist is
+    * `>0` (default `300`): A non-zero value expresses for how long (in seconds) a cached playlist is
       considered valid. For example, a value of `300` means that the cached snapshot
       of a playlist will be used if a new `lookup` occurs within 5 minutes from the
       previous one, but the playlist will be re-loaded via API if a lookup request

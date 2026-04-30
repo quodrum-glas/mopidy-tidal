@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import logging
 
-from mopidy.models import Album as MopidyAlbum, Image as MopidyImage, Playlist as MopidyPlaylist, Ref as MopidyRef
+from mopidy.models import (
+    Album as MopidyAlbum,
+    Image as MopidyImage,
+    Playlist as MopidyPlaylist,
+    Ref as MopidyRef,
+)
 from tidalapi import Session as TidalSession
 from tidalapi.models import Playlist as TidalPlaylist
-from tidalapi.models_v1 import Playlist as TidalPlaylistV1, Track as TidalTrackV1
+from tidalapi.models_v1 import Playlist as TidalPlaylistV1
 
 from mopidy_tidal.cache import cached_items
 from mopidy_tidal.helpers import to_timestamp
 from mopidy_tidal.uri import URI, URIType
 
-from ._base import IMAGE_SIZE, Model, _year_from
-from .artist import Artist
+from ._base import IMAGE_SIZE, Model
 from .track import Track
 
 logger = logging.getLogger(__name__)
@@ -92,4 +96,6 @@ class PlaylistAsAlbum(Model):
     @property
     def images(self) -> list[MopidyImage]:
         image_uri = self.api.cover(IMAGE_SIZE)
-        return [MopidyImage(uri=image_uri, width=IMAGE_SIZE, height=IMAGE_SIZE)] if image_uri else []
+        if not image_uri:
+            return []
+        return [MopidyImage(uri=image_uri, width=IMAGE_SIZE, height=IMAGE_SIZE)]

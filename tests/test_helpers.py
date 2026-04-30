@@ -3,9 +3,15 @@ from __future__ import annotations
 import datetime
 from unittest.mock import patch
 
-import pytest
-
-from mopidy_tidal.helpers import backoff_on_error, return_none, to_timestamp, try_or_none
+from mopidy_tidal.helpers import (
+    backoff_on_error,
+    filtered_logging,
+    local_ip,
+    login_required,
+    return_none,
+    to_timestamp,
+    try_or_none,
+)
 
 
 class TestBackoffOnError:
@@ -94,8 +100,8 @@ class TestToTimestamp:
 
     def test_iso_string(self):
         result = to_timestamp("2024-06-15T12:00:00+00:00")
-        expected = int(datetime.datetime(2024, 6, 15, 12, 0, tzinfo=datetime.timezone.utc).timestamp())
-        assert result == expected
+        dt = datetime.datetime(2024, 6, 15, 12, 0, tzinfo=datetime.timezone.utc)
+        assert result == int(dt.timestamp())
 
     def test_today_string(self):
         result = to_timestamp("today")
@@ -126,3 +132,66 @@ class TestReturnNone:
 
     def test_accepts_any_args(self):
         assert return_none(1, "a", key="val") is None
+
+
+class TestToTimestampTimezones:
+    def test_z_suffix(self):
+        result = to_timestamp("2024-06-15T12:00:00Z")
+        dt = datetime.datetime(2024, 6, 15, 12, 0, tzinfo=datetime.timezone.utc)
+        assert result == int(dt.timestamp())
+
+    def test_offset_without_colon(self):
+        result = to_timestamp("2024-06-15T12:00:00+0000")
+        dt = datetime.datetime(2024, 6, 15, 12, 0, tzinfo=datetime.timezone.utc)
+        assert result == int(dt.timestamp())
+
+
+class TestLoginRequired:
+    def test_returns_fallback_when_not_logged_in(self):
+        @login_required([])
+        def method(provider):
+            return "should not reach"
+
+        provider = type("P", (), {"backend": type("B", (), {"logged_in": False})})()
+        assert method(provider) == []
+
+    def test_calls_fn_when_logged_in(self):
+        @login_required([])
+        def method(provider):
+            return "ok"
+
+        provider = type("P", (), {"backend": type("B", (), {"logged_in": True})})()
+        assert method(provider) == "ok"
+
+    def test_callable_fallback(self):
+        @login_required(lambda b: f"login at {b.url}")
+        def method(provider):
+            return "ok"
+
+        backend = type("B", (), {"logged_in": False, "url": "http://x"})()
+        provider = type("P", (), {"backend": backend})()
+        assert method(provider) == "login at http://x"
+
+
+class TestLocalIp:
+    @patch("mopidy_tidal.helpers.socket.socket")
+    def test_returns_ip(self, mock_socket_cls):
+        mock_sock = mock_socket_cls.return_value
+        mock_sock.getsockname.return_value = ("192.168.1.42", 0)
+        assert local_ip() == "192.168.1.42"
+        mock_sock.close.assert_called_once()
+
+
+class TestFilteredLogging:
+    def test_adds_filter_to_root_handlers(self):
+        import logging
+
+        handler = logging.StreamHandler()
+        root = logging.getLogger()
+        root.addHandler(handler)
+        initial_filters = len(handler.filters)
+        try:
+            filtered_logging("test.logger", "keyword1")
+            assert len(handler.filters) == initial_filters + 1
+        finally:
+            root.removeHandler(handler)

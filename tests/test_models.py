@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import mopidy.models as mm
 import pytest
@@ -9,7 +8,7 @@ import tidalapi as tdl
 
 from mopidy_tidal.cache import _model_cache
 from mopidy_tidal.models import lookup_uri, model_factory, model_factory_map
-from mopidy_tidal.models._base import Model, _safe_image, _year_from
+from mopidy_tidal.models._base import Model, _year_from
 from mopidy_tidal.models.album import Album
 from mopidy_tidal.models.artist import Artist
 from mopidy_tidal.models.track import Track
@@ -29,7 +28,8 @@ def _fake_artist(id="100", name="Test Artist"):
     a = MagicMock(spec=tdl.Artist)
     a.id = id
     a.name = name
-    a.image = MagicMock(return_value="https://img/artist.jpg")
+    a.profile = MagicMock(return_value="https://img/artist.jpg")
+    a.radio = []
     return a
 
 
@@ -41,7 +41,7 @@ def _fake_album(id="200", name="Test Album", artists=None):
     a.num_tracks = 10
     a.num_volumes = 1
     a.release_date = "2024-01-15"
-    a.image = MagicMock(return_value="https://img/album.jpg")
+    a.cover = MagicMock(return_value="https://img/album.jpg")
     a.tracks = MagicMock(return_value=[])
     return a
 
@@ -56,8 +56,8 @@ def _fake_track(id="300", name="Test Track", audio_quality="HIGH"):
     t.track_num = 1
     t.duration = 240
     t.volume_num = 1
-    t.media_metadata_tags = ["LOSSLESS"]
-    t.similar = MagicMock(return_value=[])
+    t.media_tags = ["LOSSLESS"]
+    t.similar_tracks = MagicMock(return_value=[])
     return t
 
 
@@ -68,7 +68,7 @@ def _fake_playlist(id="400", name="Test Playlist"):
     p.num_tracks = 5
     p.last_updated = "2024-06-01T00:00:00"
     p.created = "2024-01-01"
-    p.image = MagicMock(return_value="https://img/playlist.jpg")
+    p.cover = MagicMock(return_value="https://img/playlist.jpg")
     p.tracks = MagicMock(return_value=[])
     return p
 
@@ -89,15 +89,6 @@ class TestYearFrom:
     def test_empty(self):
         assert _year_from("") is None
 
-
-class TestSafeImage:
-    def test_returns_url(self):
-        obj = SimpleNamespace(image=lambda size: f"https://img/{size}.jpg")
-        assert _safe_image(obj) == "https://img/320.jpg"
-
-    def test_returns_none_on_error(self):
-        obj = SimpleNamespace(image=MagicMock(side_effect=Exception))
-        assert _safe_image(obj) is None
 
 
 class TestModelBase:
@@ -144,10 +135,6 @@ class TestArtist:
         imgs = a.images
         assert len(imgs) == 1
         assert "artist" in imgs[0].uri or "img" in imgs[0].uri
-
-    def test_cached_in_model_cache(self):
-        a = Artist.from_api(_fake_artist("99", "Cached"))
-        assert _model_cache[hash("tidal:artist:99")] is a
 
 
 # -- Album ----------------------------------------------------------------
@@ -249,7 +236,13 @@ class TestModelFactoryMap:
 class TestLookupUri:
     def test_track(self):
         session = MagicMock()
-        session.track.return_value = _fake_track("88", "Looked Up")
+        fake = MagicMock()
+        fake.id = "88"
+        fake.name = "Looked Up"
+        fake.media_tags = ["LOSSLESS"]
+        fake.artists = []
+        fake.album = None
+        session.track.return_value = fake
         m = lookup_uri(session, "tidal:track:88")
         assert isinstance(m, Track)
         session.track.assert_called_once_with("88")
