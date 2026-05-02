@@ -14,38 +14,14 @@ jobs:
     strategy:
       matrix:
         versions:
-          -
-            python: 3.11
-            mopidy: 3.3
-          -
-            python: 3.12
-            mopidy: 3.3
-          -
-            python: 3.13
-            mopidy: 3.3
-          -
-            python: 3.14
-            mopidy: 3.3
-          -
-            python: 3.11
-            mopidy: 3.4
-          -
-            python: 3.12
-            mopidy: 3.4
-          -
-            python: 3.13
-            mopidy: 3.4
-          -
-            python: 3.14
-            mopidy: 3.4
-          # mopidy latest requires a gstreamer not yet in ubuntu; disabling for now.
-          # -
-          #   python: 3.13
-          #   mopidy: git
-          # -
-          #   python: 3.14
-          #   mopidy: git
-      # Run all the matrix jobs, even if one fails.
+          - { python: "3.10", mopidy: "3.3" }
+          - { python: "3.11", mopidy: "3.3" }
+          - { python: "3.12", mopidy: "3.3" }
+          - { python: "3.13", mopidy: "3.3" }
+          - { python: "3.10", mopidy: "3.4" }
+          - { python: "3.11", mopidy: "3.4" }
+          - { python: "3.12", mopidy: "3.4" }
+          - { python: "3.13", mopidy: "3.4" }
       fail-fast: false
 
     steps:
@@ -74,20 +50,11 @@ jobs:
 
       - name: Correct mopidy version
         run: |
-          if [ ${{ matrix.versions.mopidy }} != "git" ]
-          then
-            uv add mopidy==${{ matrix.versions.mopidy }}
-          else
-            # TODO remove when we update our bound
-            sed -i 's/requires-python.*/requires-python = ">=3.13"/' pyproject.toml
-            uv lock
-            uv add "mopidy @ git+https://github.com/mopidy/mopidy.git"
-          fi
+          uv add mopidy==${{ matrix.versions.mopidy }}
           uv pip show mopidy
 
       - name: Install mopidy-tidal
-        run: |
-          uv sync --group complete
+        run: uv sync --group complete
 
       - name: Integration test
         run: make integration-test
