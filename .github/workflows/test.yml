@@ -43,8 +43,7 @@ jobs:
         run: make test
 
       - name: Upload coverage
-        if: ${{ matrix.python-version == '3.13' }}
+        if: ${{ matrix.python-version == '3.13' && vars.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
