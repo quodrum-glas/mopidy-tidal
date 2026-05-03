@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 from mopidy_tidal.helpers import (
     backoff_on_error,
-    filtered_logging,
     local_ip,
     login_required,
     return_none,
@@ -178,18 +177,3 @@ class TestLocalIp:
         mock_sock.getsockname.return_value = ("192.168.1.42", 0)
         assert local_ip() == "192.168.1.42"
         mock_sock.close.assert_called_once()
-
-
-class TestFilteredLogging:
-    def test_adds_filter_to_root_handlers(self):
-        import logging
-
-        handler = logging.StreamHandler()
-        root = logging.getLogger()
-        root.addHandler(handler)
-        initial_filters = len(handler.filters)
-        try:
-            filtered_logging("test.logger", "keyword1")
-            assert len(handler.filters) == initial_filters + 1
-        finally:
-            root.removeHandler(handler)
