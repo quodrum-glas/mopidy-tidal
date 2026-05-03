@@ -55,7 +55,6 @@ jobs:
       - name: Correct mopidy version
         run: |
           uv add mopidy==${{ matrix.versions.mopidy }}
-          uv add "setuptools<82"
           uv pip show mopidy
 
       - name: Install mopidy-tidal
