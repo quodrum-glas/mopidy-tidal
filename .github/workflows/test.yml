@@ -28,6 +28,11 @@ jobs:
           cache-suffix: ${{ matrix.python-version }}
           cache-dependency-glob: pyproject.toml
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq libcairo2-dev libgirepository-2.0-dev pkg-config
+
       - name: Install mopidy-tidal
         run: uv sync --extra dev
 
