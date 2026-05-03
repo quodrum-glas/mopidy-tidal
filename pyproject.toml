@@ -33,11 +33,17 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "pytest-mock", "ruff"]
 
+[dependency-groups]
+complete = ["mopidy-tidal[dev]"]
+
 [project.entry-points."mopidy.ext"]
 tidal = "mopidy_tidal:Extension"
 
 [project.urls]
 Homepage = "https://github.com/quodrum-glas/mopidy-tidal"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.sdist]
 include = ["mopidy_tidal/", "LICENSE", "README.md"]
