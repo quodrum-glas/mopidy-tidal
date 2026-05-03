@@ -35,29 +35,16 @@ INTERACTIVE_HTML_BODY = """
 """
 
 
-def start_oauth_daemon(
-    session: Session,
-    port: int,
-    on_login: Queue[bool],
-) -> HTTPServer:
+def start_oauth_daemon(session: Session, port: int, on_login: Queue[bool]) -> HTTPServer:
     login_handler = LoginHandler(session, on_login)
     handler = partial(HTTPHandler, login_handler)
     server = HTTPServer(("", port), handler)
-    threading.Thread(
-        name="TidalOAuthLogin",
-        target=server.serve_forever,
-        daemon=True,
-    ).start()
+    threading.Thread(name="TidalOAuthLogin", target=server.serve_forever, daemon=True).start()
     return server
 
 
 class HTTPHandler(BaseHTTPRequestHandler):
-    def __init__(
-        self,
-        login_handler: LoginHandler,
-        *args: object,
-        **kwargs: object,
-    ) -> None:
+    def __init__(self, login_handler: LoginHandler, *args: object, **kwargs: object) -> None:
         self.login_handler = login_handler
         super().__init__(*args, **kwargs)
 

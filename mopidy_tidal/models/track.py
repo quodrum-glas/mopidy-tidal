@@ -24,11 +24,7 @@ class Track(Model):
     def from_api(cls, track: TidalTrack | TidalTrackV1, **kwargs) -> Track:
         """From any tidal track model (v1 or oapi). Cached only if complete."""
         uri = URI(URIType.TRACK, track.id)
-        return cls(
-            ref=MopidyRef.track(uri=str(uri), name=track.name),
-            api=track,
-            **kwargs,
-        )
+        return cls(ref=MopidyRef.track(uri=str(uri), name=track.name), api=track, **kwargs)
 
     @classmethod
     @cached_by_uri
@@ -86,7 +82,4 @@ class Track(Model):
 
     @property
     def images(self) -> list[MopidyImage]:
-        return [
-            *(self.album.images if self.album else []),
-            *(img for a in self.artists for img in a.images),
-        ]
+        return [*(self.album.images if self.album else []), *(img for a in self.artists for img in a.images)]

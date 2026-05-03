@@ -22,10 +22,7 @@ class Page(Model):
     @classmethod
     def from_v1(cls, page: TidalPageV1) -> Page:
         uri = URI(URIType.PAGE)
-        return cls(
-            ref=MopidyRef.directory(uri=str(uri), name=page.title),
-            api=page,
-        )
+        return cls(ref=MopidyRef.directory(uri=str(uri), name=page.title), api=page)
 
     @classmethod
     def from_uri(cls, session: TidalSession, /, *, uri: str) -> Page:
@@ -33,11 +30,7 @@ class Page(Model):
         if parsed.type != URIType.PAGE:
             raise ValueError(f"Not a valid uri for Page: {uri}")
         page = session.page.get(parsed.page)
-        return cls(
-            ref=MopidyRef.directory(uri=str(parsed), name=page.title),
-            api=page,
-            api_path=parsed.page,
-        )
+        return cls(ref=MopidyRef.directory(uri=str(parsed), name=page.title), api=page, api_path=parsed.page)
 
     @property
     def last_modified(self) -> int:

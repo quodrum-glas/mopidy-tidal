@@ -17,20 +17,11 @@ _futures_cache: TTLCache = TTLCache(maxsize=1024, ttl=CACHE_TTL)
 
 # -- decorators -----------------------------------------------------------
 
-cached_by_uri = cached(
-    _model_cache,
-    key=lambda *args, uri, **kwargs: hash(uri),
-)
+cached_by_uri = cached(_model_cache, key=lambda *args, uri, **kwargs: hash(uri))
 
-cached_items = cached(
-    _items_cache,
-    key=lambda item, *args, **kwargs: hashkey(item.uri, item.last_modified),
-)
+cached_items = cached(_items_cache, key=lambda item, *args, **kwargs: hashkey(item.uri, item.last_modified))
 
-cached_future = cached(
-    _futures_cache,
-    key=lambda *args, uri, **kwargs: hash(uri),
-)
+cached_future = cached(_futures_cache, key=lambda *args, uri, **kwargs: hash(uri))
 
 
 def cache_by_uri(fn: Callable[..., Any]) -> Callable[..., Any]:

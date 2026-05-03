@@ -11,11 +11,7 @@ from typing import Any
 TIDAL_PAGE_SIZE: int = 50
 
 
-def paginated(
-    call: Callable[..., list],
-    limit: int = TIDAL_PAGE_SIZE,
-    total: int | None = None,
-) -> Iterator[list]:
+def paginated(call: Callable[..., list], limit: int = TIDAL_PAGE_SIZE, total: int | None = None) -> Iterator[list]:
     if total:
         pages = (total // limit) + min(1, total % limit)
         yield from sorted_threaded(*(partial(call, limit=limit, offset=limit * idx) for idx in range(pages)))
@@ -32,17 +28,11 @@ def paginated(
 MAX_WORKERS: int = 4
 
 
-def _threaded(
-    *args: Callable[[], Any],
-    max_workers: int = MAX_WORKERS,
-) -> Iterator[tuple[Callable, Any]]:
+def _threaded(*args: Callable[[], Any], max_workers: int = MAX_WORKERS) -> Iterator[tuple[Callable, Any]]:
     count = len(args)
     if not count:
         return
-    with ThreadPoolExecutor(
-        max_workers=min(max_workers, count),
-        thread_name_prefix="mopidy-tidal-split-",
-    ) as executor:
+    with ThreadPoolExecutor(max_workers=min(max_workers, count), thread_name_prefix="mopidy-tidal-split-") as executor:
         futures = {executor.submit(call): call for call in args}
         for future in as_completed(futures):
             yield futures[future], future.result()
@@ -77,12 +67,7 @@ class BatchCollector:
         result = future.result()             # blocks until flush
     """
 
-    def __init__(
-        self,
-        flush_fn: Callable[[list], dict],
-        timeout: float = 0.8,
-        max_size: int = 50,
-    ) -> None:
+    def __init__(self, flush_fn: Callable[[list], dict], timeout: float = 0.8, max_size: int = 50) -> None:
         self._flush_fn = flush_fn
         self._timeout = timeout
         self._max_size = max_size

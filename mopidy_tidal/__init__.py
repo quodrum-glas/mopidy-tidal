@@ -28,19 +28,11 @@ class Extension(ext.Extension):
         schema["quality"] = config.String(choices=[e.value for e in Quality])
         schema["fetch_album_covers"] = config.Boolean(optional=True)
         schema["playlist_cache_refresh_secs"] = config.Integer(
-            optional=True,
-            choices=chain(range(10, 60, 10), range(60, 600, 60), range(600, 3601, 600)),
+            optional=True, choices=chain(range(10, 60, 10), range(60, 600, 60), range(600, 3601, 600))
         )
-        schema["pagination_max_results"] = config.Integer(
-            optional=True,
-            choices=range(20, 101, 20),
-        )
+        schema["pagination_max_results"] = config.Integer(optional=True, choices=range(20, 101, 20))
         schema["login_web_port"] = config.Integer(optional=True, minimum=8000, maximum=8999)
-        schema["http_timeout"] = config.Pair(
-            optional=True,
-            separator=",",
-            subtypes=(config.Float(), config.Float()),
-        )
+        schema["http_timeout"] = config.Pair(optional=True, separator=",", subtypes=(config.Float(), config.Float()))
         return schema
 
     def setup(self, registry: ext.Registry) -> None:

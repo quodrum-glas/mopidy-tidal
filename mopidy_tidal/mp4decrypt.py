@@ -340,12 +340,7 @@ def _clean_init(init_data: bytes) -> bytes:
 
 
 def _clean_segment(
-    segment: bytes,
-    key: bytes,
-    constant_iv: bytes,
-    crypt_byte_block: int,
-    skip_byte_block: int,
-    per_sample_iv_size: int,
+    segment: bytes, key: bytes, constant_iv: bytes, crypt_byte_block: int, skip_byte_block: int, per_sample_iv_size: int
 ) -> bytes:
     """Decrypt mdat and strip all encryption boxes from a media segment.
 
@@ -366,13 +361,7 @@ def _clean_segment(
     mdat_body = segment[mdat_off + 8 : mdat_off + mdat_size]
 
     dec_body = _decrypt_cbcs(
-        mdat_body,
-        sample_sizes,
-        key,
-        constant_iv,
-        per_sample_ivs,
-        crypt_byte_block,
-        skip_byte_block,
+        mdat_body, sample_sizes, key, constant_iv, per_sample_ivs, crypt_byte_block, skip_byte_block
     )
 
     # Rebuild moof without encryption boxes

@@ -30,8 +30,7 @@ class TidalBackend(ThreadingActor, backend.Backend):
         self.playback = playback.TidalPlaybackProvider(audio=audio, backend=self)
         self.library = library.TidalLibraryProvider(backend=self)
         self.playlists = playlists.TidalPlaylistsProvider(
-            backend=self,
-            playlist_cache_ttl=self._ext("playlist_cache_refresh_secs"),
+            backend=self, playlist_cache_ttl=self._ext("playlist_cache_refresh_secs")
         )
         self.uri_schemes = [self.EXT]
         self.quality: str = self._ext("quality")
@@ -67,11 +66,7 @@ class TidalBackend(ThreadingActor, backend.Backend):
         self.logged_in = self.session.check_login()
         if self.logged_in:
             self.session.save_session_to_file(token_file)
-            logger.info(
-                "TIDAL Login OK: user=%s country=%s",
-                self.session.user_id,
-                self.session.country_code,
-            )
+            logger.info("TIDAL Login OK: user=%s country=%s", self.session.user_id, self.session.country_code)
             self._start_drm_proxy()
         else:
             self._new_login(token_file, ip)
@@ -87,10 +82,7 @@ class TidalBackend(ThreadingActor, backend.Backend):
         server = start_oauth_daemon(self.session, port, on_login)
         logger.info("No credentials. Visit %s to authenticate", self._login_url)
         threading.Thread(
-            name="TidalOAuthWait",
-            target=self._wait_for_login,
-            args=(token_file, on_login, server),
-            daemon=True,
+            name="TidalOAuthWait", target=self._wait_for_login, args=(token_file, on_login, server), daemon=True
         ).start()
 
     def _wait_for_login(self, token_file: Path, on_login: Queue[bool], server) -> None:
@@ -99,11 +91,7 @@ class TidalBackend(ThreadingActor, backend.Backend):
         self.logged_in = True
         self.session.save_session_to_file(token_file)
         self._login_url = None
-        logger.info(
-            "TIDAL Login OK: user=%s country=%s",
-            self.session.user_id,
-            self.session.country_code,
-        )
+        logger.info("TIDAL Login OK: user=%s country=%s", self.session.user_id, self.session.country_code)
 
     def on_stop(self) -> None:
         if self.drm_server:

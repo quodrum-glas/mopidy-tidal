@@ -11,13 +11,7 @@ from typing import TYPE_CHECKING
 
 import requests
 from mpegdash.parser import MPEGDASHParser
-from tenacity import (
-    before_sleep_log,
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_full_jitter,
-)
+from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_full_jitter
 from tidalapi.http import TidalRequestsSession
 from tidalapi.mp4decrypt import EncryptionParams, decrypt_init, decrypt_segment
 from urllib3.exceptions import ResponseError
@@ -37,10 +31,7 @@ def _seg_urls(rep: Representation) -> tuple[str, set[str]]:
     st = rep.segment_templates[0]
     start = int(st.start_number)
     count = sum(1 + int(s.r or 0) for s in st.segment_timelines[0].Ss)
-    return (
-        st.initialization,
-        {st.media.replace("$Number$", str(i)) for i in range(start, start + count)},
-    )
+    return (st.initialization, {st.media.replace("$Number$", str(i)) for i in range(start, start + count)})
 
 
 def _generate_mpd_xml(mpd: MPEGDASH, proxy_prefix: str, selected_rep_ids: set[str]) -> str:
@@ -91,12 +82,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     do_HEAD = do_GET
 
-    def _reply(
-        self,
-        data: bytes,
-        hdrs: dict[str, str] | None = None,
-        code: int = 200,
-    ) -> None:
+    def _reply(self, data: bytes, hdrs: dict[str, str] | None = None, code: int = 200) -> None:
         self.send_response(code)
         for k, v in (hdrs or {"Content-Type": "text/plain"}).items():
             self.send_header(k, v)
@@ -126,11 +112,7 @@ class DrmServer(HTTPServer):
     """
 
     def __init__(self, http_timeout: tuple[float, float]) -> None:
-        self.http = TidalRequestsSession(
-            timeout=http_timeout,
-            pool_connections=2,
-            pool_maxsize=4,
-        )
+        self.http = TidalRequestsSession(timeout=http_timeout, pool_connections=2, pool_maxsize=4)
         self.mpd_bytes: bytes = b""
         # init_url → (media_urls_set, cached_params) — ordered by bandwidth
         self._reprs: OrderedDict[str, tuple[set[str], EncryptionParams | None]] = OrderedDict()
@@ -190,11 +172,7 @@ class DrmServer(HTTPServer):
         return f"{self.base_url}/manifest.mpd"
 
     def start(self) -> None:
-        threading.Thread(
-            target=self._serve,
-            name="TidalDrmProxy",
-            daemon=True,
-        ).start()
+        threading.Thread(target=self._serve, name="TidalDrmProxy", daemon=True).start()
         logger.debug("proxy on %s", self.base_url)
 
     def _serve(self) -> None:
@@ -208,11 +186,7 @@ class DrmServer(HTTPServer):
         self._stop.set()
 
 
-def decrypt_stream(
-    stream: StreamInfo,
-    keys: list[tuple[str, str]],
-    server: DrmServer,
-) -> str:
+def decrypt_stream(stream: StreamInfo, keys: list[tuple[str, str]], server: DrmServer) -> str:
     """Return a local URL to a cleaned MPD proxied through the DRM server."""
     if not keys:
         raise RuntimeError(f"No content keys for track {stream.track_id}")

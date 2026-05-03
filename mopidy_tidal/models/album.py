@@ -24,10 +24,7 @@ class Album(Model):
     def from_api(cls, album: TidalAlbum | TidalAlbumV1) -> Album:
         """From any tidal album model (v1 or oapi)."""
         uri = URI(URIType.ALBUM, album.id)
-        return cls(
-            ref=MopidyRef.album(uri=str(uri), name=album.name),
-            api=album,
-        )
+        return cls(ref=MopidyRef.album(uri=str(uri), name=album.name), api=album)
 
     @classmethod
     @cached_by_uri

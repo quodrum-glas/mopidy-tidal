@@ -47,9 +47,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
     def __init__(self, *args: object, playlist_cache_ttl: int, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
         self.__as_list_cache: TTLCache = TTLCache(maxsize=1, ttl=playlist_cache_ttl)
-        self._injected_actions: dict[str, Callable] = {
-            "radio": self._get_radio,
-        }
+        self._injected_actions: dict[str, Callable] = {"radio": self._get_radio}
         self._injected: dict[str, Playlist] = {name: _empty(name) for name in self._injected_actions}
 
     # -- list / browse ----------------------------------------------------
@@ -129,10 +127,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
 
         track = lookup_uri(self.backend.session, seed.uri)
         logger.info("Generating radio from: %s", track.name)
-        return playlist.replace(
-            name=f"radio: {track.name}",
-            tracks=[t.full for t in track.radio()],
-        )
+        return playlist.replace(name=f"radio: {track.name}", tracks=[t.full for t in track.radio()])
 
     # -- CRUD helpers -----------------------------------------------------
 

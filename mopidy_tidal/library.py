@@ -92,21 +92,9 @@ class TidalLibraryProvider(backend.LibraryProvider):
         return [item.ref for item in model.items()]
 
     @login_required(SearchResult())
-    def search(
-        self,
-        query: dict | None = None,
-        uris: list[str] | None = None,
-        exact: bool = False,
-    ) -> SearchResult:
+    def search(self, query: dict | None = None, uris: list[str] | None = None, exact: bool = False) -> SearchResult:
         total = self.backend.pagination_max_results
-        return SearchResult(
-            **tidal_search(
-                self.backend.session,
-                query=query,
-                total=total,
-                exact=exact,
-            )
-        )
+        return SearchResult(**tidal_search(self.backend.session, query=query, total=total, exact=exact))
 
     def get_images(self, uris: list[str]) -> dict[str, list]:
         result: dict[str, list] = {}

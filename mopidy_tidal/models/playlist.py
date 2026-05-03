@@ -2,18 +2,10 @@ from __future__ import annotations
 
 import logging
 
-from mopidy.models import (
-    Album as MopidyAlbum,
-)
-from mopidy.models import (
-    Image as MopidyImage,
-)
-from mopidy.models import (
-    Playlist as MopidyPlaylist,
-)
-from mopidy.models import (
-    Ref as MopidyRef,
-)
+from mopidy.models import Album as MopidyAlbum
+from mopidy.models import Image as MopidyImage
+from mopidy.models import Playlist as MopidyPlaylist
+from mopidy.models import Ref as MopidyRef
 from tidalapi import Session as TidalSession
 from tidalapi.models import Playlist as TidalPlaylist
 from tidalapi.models_v1 import Playlist as TidalPlaylistV1
@@ -33,10 +25,7 @@ class Playlist(Model):
     def from_api(cls, playlist: TidalPlaylist | TidalPlaylistV1) -> Playlist:
         """From any tidal playlist model (v1 preferred, oapi for exception)."""
         uri = URI(URIType.PLAYLIST, playlist.id)
-        return cls(
-            ref=MopidyRef.playlist(uri=str(uri), name=playlist.name),
-            api=playlist,
-        )
+        return cls(ref=MopidyRef.playlist(uri=str(uri), name=playlist.name), api=playlist)
 
     @classmethod
     def from_uri(cls, session: TidalSession, /, *, uri: str) -> Playlist:
@@ -44,11 +33,7 @@ class Playlist(Model):
         if parsed.type != URIType.PLAYLIST:
             raise ValueError(f"Not a valid uri for Playlist: {uri}")
         playlist = session.playlist(parsed.playlist)
-        return cls(
-            ref=MopidyRef.playlist(uri=str(parsed), name=playlist.name),
-            api=playlist,
-            session=session,
-        )
+        return cls(ref=MopidyRef.playlist(uri=str(parsed), name=playlist.name), api=playlist, session=session)
 
     @property
     def last_modified(self) -> int:
@@ -56,10 +41,7 @@ class Playlist(Model):
 
     def build(self) -> MopidyPlaylist:
         return MopidyPlaylist(
-            uri=self.uri,
-            name=self.name,
-            tracks=[t.full for t in self.items()],
-            last_modified=self.last_modified,
+            uri=self.uri, name=self.name, tracks=[t.full for t in self.items()], last_modified=self.last_modified
         )
 
     def items(self) -> list[Track]:
@@ -83,16 +65,10 @@ class PlaylistAsAlbum(Model):
     @classmethod
     def from_api(cls, playlist: TidalPlaylistV1) -> PlaylistAsAlbum:
         uri = URI(URIType.PLAYLIST, playlist.id)
-        return cls(
-            ref=MopidyRef.album(uri=str(uri), name=playlist.name),
-            api=playlist,
-        )
+        return cls(ref=MopidyRef.album(uri=str(uri), name=playlist.name), api=playlist)
 
     def build(self) -> MopidyAlbum:
-        return MopidyAlbum(
-            uri=self.uri,
-            name=self.name,
-        )
+        return MopidyAlbum(uri=self.uri, name=self.name)
 
     def items(self) -> list[Model]:
         return self.tracks()

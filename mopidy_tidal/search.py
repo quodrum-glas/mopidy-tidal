@@ -16,11 +16,7 @@ logger = logging.getLogger(__name__)
 
 @cached(
     LRUCache(maxsize=128),
-    key=lambda *args, query, total, exact: hashkey(
-        hashkey(**{k: tuple(v) for k, v in query.items()}),
-        total,
-        exact,
-    ),
+    key=lambda *args, query, total, exact: hashkey(hashkey(**{k: tuple(v) for k, v in query.items()}), total, exact),
 )
 def tidal_search(session, /, *, query, total, exact=False):
     logger.info("Search query: %r (total=%d, exact=%s)", query, total, exact)
@@ -33,9 +29,7 @@ def tidal_search(session, /, *, query, total, exact=False):
     # Determine which result types to return based on query fields
     want_tracks = search_keys.intersection({"any", "track_name"})
     want_albums = search_keys.intersection({"any", "album"})
-    want_artists = search_keys.intersection(
-        {"any", "artist", "albumartist", "performer", "composer"},
-    )
+    want_artists = search_keys.intersection({"any", "artist", "albumartist", "performer", "composer"})
     want_playlists = search_keys.intersection({"any", "comment", "date", "genre"})
 
     include = []
@@ -58,9 +52,7 @@ def tidal_search(session, /, *, query, total, exact=False):
         if raw_tracks:
             max_hydrate = 20
             for i in range(0, len(raw_tracks), max_hydrate):
-                hydrated = session.get_tracks(
-                    track_ids=[t.id for t in raw_tracks[i : i + max_hydrate]],
-                )
+                hydrated = session.get_tracks(track_ids=[t.id for t in raw_tracks[i : i + max_hydrate]])
                 for t in hydrated:
                     try:
                         out["tracks"].append(model_factory(t))

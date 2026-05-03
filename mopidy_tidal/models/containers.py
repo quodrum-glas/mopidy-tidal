@@ -15,10 +15,7 @@ from ._base import Model
 class ItemList(Model):
     @classmethod
     def from_v1(cls, items: list) -> ItemList:
-        return cls(
-            ref=MopidyRef.playlist(uri=str(URI(URIType.PLAYLIST)), name=None),
-            api=items,
-        )
+        return cls(ref=MopidyRef.playlist(uri=str(URI(URIType.PLAYLIST)), name=None), api=items)
 
     def items(self) -> list[Model]:
         from . import model_factory_map
@@ -30,10 +27,7 @@ class ItemList(Model):
 
     def build(self) -> MopidyPlaylist:
         return MopidyPlaylist(
-            uri=self.uri,
-            name=self.name,
-            tracks=[t.full for t in self.items()],
-            last_modified=to_timestamp("today"),
+            uri=self.uri, name=self.name, tracks=[t.full for t in self.items()], last_modified=to_timestamp("today")
         )
 
 
@@ -42,10 +36,7 @@ class Future(Model):
     @cache_future
     def from_v1(cls, future: object, /, *, ref_type: str, title: str) -> Future:
         uri = URI(URIType.FUTURE, str(hash(future)))
-        return cls(
-            ref=MopidyRef(type=ref_type, uri=str(uri), name=feat_item(title)),
-            api=future,
-        )
+        return cls(ref=MopidyRef(type=ref_type, uri=str(uri), name=feat_item(title)), api=future)
 
     @classmethod
     @cached_future

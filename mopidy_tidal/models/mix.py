@@ -18,10 +18,7 @@ class Mix(Model):
     @classmethod
     def from_api(cls, mix: TidalMixV1) -> Mix:
         uri = URI(URIType.MIX, mix.id)
-        return cls(
-            ref=MopidyRef.playlist(uri=str(uri), name=f"{mix.title} ({mix.sub_title})"),
-            api=mix,
-        )
+        return cls(ref=MopidyRef.playlist(uri=str(uri), name=f"{mix.title} ({mix.sub_title})"), api=mix)
 
     @classmethod
     def from_uri(cls, session: TidalSession, /, *, uri: str) -> Mix:
@@ -29,10 +26,7 @@ class Mix(Model):
         if parsed.type != URIType.MIX:
             raise ValueError(f"Not a valid uri for Mix: {uri}")
         mix = session.mix(parsed.mix)
-        return cls(
-            ref=MopidyRef.playlist(uri=str(parsed), name=f"{mix.title} ({mix.sub_title})"),
-            api=mix,
-        )
+        return cls(ref=MopidyRef.playlist(uri=str(parsed), name=f"{mix.title} ({mix.sub_title})"), api=mix)
 
     @property
     def last_modified(self) -> int:
@@ -40,10 +34,7 @@ class Mix(Model):
 
     def build(self) -> MopidyPlaylist:
         return MopidyPlaylist(
-            uri=self.uri,
-            name=self.name,
-            tracks=[t.full for t in self.items()],
-            last_modified=self.last_modified,
+            uri=self.uri, name=self.name, tracks=[t.full for t in self.items()], last_modified=self.last_modified
         )
 
     def items(self) -> list[Track]:

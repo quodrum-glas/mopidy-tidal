@@ -43,12 +43,7 @@ def to_timestamp(dt: str | datetime.datetime | float | None) -> int:
         return 0
     if isinstance(dt, str):
         if dt.lower() == "today":
-            return int(
-                datetime.datetime.combine(
-                    datetime.datetime.now().date(),
-                    datetime.time.min,
-                ).timestamp()
-            )
+            return int(datetime.datetime.combine(datetime.datetime.now().date(), datetime.time.min).timestamp())
         # Handle 'Z' suffix (UTC timezone indicator)
         if dt.endswith("Z"):
             dt = dt[:-1] + "+00:00"
