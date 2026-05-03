@@ -3,14 +3,7 @@ from __future__ import annotations
 import datetime
 from unittest.mock import patch
 
-from mopidy_tidal.helpers import (
-    backoff_on_error,
-    local_ip,
-    login_required,
-    return_none,
-    to_timestamp,
-    try_or_none,
-)
+from mopidy_tidal.helpers import backoff_on_error, local_ip, login_required, return_none, to_timestamp, try_or_none
 
 
 class TestBackoffOnError:
