@@ -12,7 +12,7 @@ from pykka import ThreadingActor
 from mopidy_tidal import Extension, library, playback, playlists
 from mopidy_tidal.auth_http_server import start_oauth_daemon
 from mopidy_tidal.drm import DrmServer
-from mopidy_tidal.helpers import filtered_logging, local_ip
+from mopidy_tidal.helpers import local_ip
 from mopidy_tidal.session import create_session
 
 logger = logging.getLogger(__name__)
