@@ -18,10 +18,7 @@ def paginated(
 ) -> Iterator[list]:
     if total:
         pages = (total // limit) + min(1, total % limit)
-        yield from sorted_threaded(*(
-            partial(call, limit=limit, offset=limit * idx)
-            for idx in range(pages)
-        ))
+        yield from sorted_threaded(*(partial(call, limit=limit, offset=limit * idx) for idx in range(pages)))
     else:
         idx = 0
         while True:

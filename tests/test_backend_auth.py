@@ -9,11 +9,7 @@ from mopidy_tidal.auth_http_server import LoginHandler, start_oauth_daemon
 from mopidy_tidal.session import create_session
 
 _SESSION_KW = dict(
-    client_id="cid",
-    client_secret="",
-    quality="HIGH",
-    fetch_album_covers=False,
-    http_timeout=(3.05, 1.5),
+    client_id="cid", client_secret="", quality="HIGH", fetch_album_covers=False, http_timeout=(3.05, 1.5)
 )
 
 
@@ -50,12 +46,9 @@ class TestCreateSession:
     def test_passes_quality(self, tmp_path):
         token = tmp_path / "tidal.json"
         token.write_text(
-            '{"token_type":"Bearer","access_token":"tok",'
-            '"refresh_token":"ref","expiry_time":"2099-01-01T00:00:00"}'
+            '{"token_type":"Bearer","access_token":"tok","refresh_token":"ref","expiry_time":"2099-01-01T00:00:00"}'
         )
-        s = create_session(
-            **{**_SESSION_KW, "quality": "LOSSLESS"}, token_file=token,
-        )
+        s = create_session(**{**_SESSION_KW, "quality": "LOSSLESS"}, token_file=token)
         assert s.config.quality == "LOSSLESS"
 
     def test_passes_client_secret(self, tmp_path):
@@ -65,9 +58,7 @@ class TestCreateSession:
             '"refresh_token":"ref","expiry_time":"2099-01-01T00:00:00",'
             '"is_pkce":false}'
         )
-        s = create_session(
-            **{**_SESSION_KW, "client_secret": "sec"}, token_file=token,
-        )
+        s = create_session(**{**_SESSION_KW, "client_secret": "sec"}, token_file=token)
         assert s.auth.client_secret == "sec"
 
 
@@ -100,9 +91,7 @@ class TestLoginHandlerPkce:
 
     def test_set_login_result_calls_complete_pkce_login(self, handler, session, queue):
         handler.set_login_result("https://tidal.com/android/login/auth?code=abc")
-        session.complete_pkce_login.assert_called_once_with(
-            "https://tidal.com/android/login/auth?code=abc"
-        )
+        session.complete_pkce_login.assert_called_once_with("https://tidal.com/android/login/auth?code=abc")
         assert queue.get_nowait() is True
 
     def test_set_login_result_reraises_on_failure(self, handler, session, queue):
@@ -243,9 +232,7 @@ class TestBackendOnStart:
     @patch("mopidy_tidal.backend.Extension.get_data_dir")
     @patch("mopidy_tidal.backend.create_session")
     @patch("mopidy_tidal.backend.start_oauth_daemon")
-    def test_new_login_triggered_when_check_fails(
-        self, mock_daemon, mock_create, mock_data_dir, mock_ip, tmp_path
-    ):
+    def test_new_login_triggered_when_check_fails(self, mock_daemon, mock_create, mock_data_dir, mock_ip, tmp_path):
         mock_data_dir.return_value = tmp_path
         b = self._make_backend(tmp_path)
 
@@ -264,9 +251,7 @@ class TestBackendOnStart:
     @patch("mopidy_tidal.backend.local_ip", return_value="127.0.0.1")
     @patch("mopidy_tidal.backend.Extension.get_data_dir")
     @patch("mopidy_tidal.backend.create_session")
-    def test_token_file_path_includes_client_id(
-        self, mock_create, mock_data_dir, mock_ip, tmp_path
-    ):
+    def test_token_file_path_includes_client_id(self, mock_create, mock_data_dir, mock_ip, tmp_path):
         mock_data_dir.return_value = tmp_path
         b = self._make_backend(tmp_path)
 

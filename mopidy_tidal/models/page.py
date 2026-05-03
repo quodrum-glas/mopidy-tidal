@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 
-from mopidy.models import Image as MopidyImage, Ref as MopidyRef
+from mopidy.models import Image as MopidyImage
+from mopidy.models import Ref as MopidyRef
 from tidalapi import Session as TidalSession
 from tidalapi.models_v1 import Page as TidalPageV1
-from tidalapi.models_v1.page import PageItem as TidalPageItemV1, PageLink as TidalPageLinkV1
+from tidalapi.models_v1.page import PageItem as TidalPageItemV1
+from tidalapi.models_v1.page import PageLink as TidalPageLinkV1
 
 from mopidy_tidal.display import feat_item
 from mopidy_tidal.helpers import to_timestamp

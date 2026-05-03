@@ -4,8 +4,14 @@ import logging
 
 from mopidy.models import (
     Album as MopidyAlbum,
+)
+from mopidy.models import (
     Image as MopidyImage,
+)
+from mopidy.models import (
     Playlist as MopidyPlaylist,
+)
+from mopidy.models import (
     Ref as MopidyRef,
 )
 from tidalapi import Session as TidalSession
@@ -20,6 +26,7 @@ from ._base import IMAGE_SIZE, Model
 from .track import Track
 
 logger = logging.getLogger(__name__)
+
 
 class Playlist(Model):
     @classmethod

@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 class TidalPlaybackProvider(PlaybackProvider):
-
     MAX_CACHE_MANIFEST_FILES = 5
 
     def __init__(self, *args: object, **kwargs: object) -> None:
@@ -37,7 +36,9 @@ class TidalPlaybackProvider(PlaybackProvider):
         stream = self.backend.session.get_stream(track_id, self.backend.quality)
         logger.debug(
             "Playback: track=%s mime=%s drm=%s",
-            track_id, stream.manifest_mime_type, stream.drm_system or "none",
+            track_id,
+            stream.manifest_mime_type,
+            stream.drm_system or "none",
         )
 
         if stream.is_drm:

@@ -35,16 +35,19 @@ cached_future = cached(
 
 def cache_by_uri(fn: Callable[..., Any]) -> Callable[..., Any]:
     """Store the returned model in _model_cache keyed by its URI."""
+
     @wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         item = fn(*args, **kwargs)
         _model_cache[hash(item.ref.uri)] = item
         return item
+
     return wrapper
 
 
 def cache_by_uri_if(check: Callable[[Any], bool]) -> Callable:
     """Cache the returned model only if *check(item)* is truthy."""
+
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -52,7 +55,9 @@ def cache_by_uri_if(check: Callable[[Any], bool]) -> Callable:
             if check(item):
                 _model_cache[hash(item.ref.uri)] = item
             return item
+
         return wrapper
+
     return decorator
 
 
@@ -63,4 +68,5 @@ def cache_future(fn: Callable[..., Any]) -> Callable[..., Any]:
         if item:
             _futures_cache[hash(item.ref.uri)] = item
         return item
+
     return wrapper

@@ -44,7 +44,7 @@ class TestPaginated:
         data = list(range(120))
 
         def call(limit, offset):
-            return data[offset:offset + limit]
+            return data[offset : offset + limit]
 
         pages = list(paginated(call, limit=50, total=120))
         flat = [item for page in pages for item in page]
@@ -54,7 +54,7 @@ class TestPaginated:
         data = list(range(100))
 
         def call(limit, offset):
-            return data[offset:offset + limit]
+            return data[offset : offset + limit]
 
         pages = list(paginated(call, limit=50, total=100))
         flat = [item for page in pages for item in page]

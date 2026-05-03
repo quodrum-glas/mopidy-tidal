@@ -212,15 +212,11 @@ class TestCrudHelpers:
 
     def test_add_tracks_calls_session(self, provider, backend):
         provider._add_tracks("tidal:playlist:abc", ["tidal:track:1", "tidal:track:2"])
-        backend.session.add_tracks_to_playlist.assert_called_once_with(
-            "abc", ["1", "2"]
-        )
+        backend.session.add_tracks_to_playlist.assert_called_once_with("abc", ["1", "2"])
 
     def test_remove_tracks_calls_session(self, provider, backend):
         provider._remove_tracks("tidal:playlist:abc", {"tidal:track:3"})
-        backend.session.remove_tracks_from_playlist.assert_called_once_with(
-            "abc", ["3"]
-        )
+        backend.session.remove_tracks_from_playlist.assert_called_once_with("abc", ["3"])
 
 
 # -- save (non-injected) --------------------------------------------------
@@ -230,9 +226,7 @@ class TestSave:
     def test_creates_when_lookup_returns_none(self, provider, backend):
         with (
             patch.object(provider, "lookup", return_value=None),
-            patch.object(
-                provider, "_create", return_value=_pl("tidal:playlist:new"),
-            ) as mock_create,
+            patch.object(provider, "_create", return_value=_pl("tidal:playlist:new")) as mock_create,
         ):
             provider.save(_pl("tidal:playlist:new", "New"))
             mock_create.assert_called_once()
@@ -240,8 +234,7 @@ class TestSave:
     def test_adds_new_tracks(self, provider, backend):
         old = _pl("tidal:playlist:1", "P", [_track("tidal:track:1")])
         new = _pl("tidal:playlist:1", "P", [_track("tidal:track:1"), _track("tidal:track:2")])
-        with patch.object(provider, "lookup", return_value=old), \
-             patch.object(provider, "_add_tracks") as mock_add:
+        with patch.object(provider, "lookup", return_value=old), patch.object(provider, "_add_tracks") as mock_add:
             provider.save(new)
             mock_add.assert_called_once()
             added_uris = mock_add.call_args[0][1]
@@ -250,8 +243,7 @@ class TestSave:
     def test_removes_old_tracks(self, provider, backend):
         old = _pl("tidal:playlist:1", "P", [_track("tidal:track:1"), _track("tidal:track:2")])
         new = _pl("tidal:playlist:1", "P", [_track("tidal:track:1")])
-        with patch.object(provider, "lookup", return_value=old), \
-             patch.object(provider, "_remove_tracks") as mock_rm:
+        with patch.object(provider, "lookup", return_value=old), patch.object(provider, "_remove_tracks") as mock_rm:
             provider.save(new)
             mock_rm.assert_called_once()
             removed_uris = mock_rm.call_args[0][1]

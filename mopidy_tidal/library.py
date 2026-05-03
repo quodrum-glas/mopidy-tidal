@@ -40,7 +40,7 @@ class TidalLibraryProvider(backend.LibraryProvider):
         if field == "track":
             tracks = session.get_user_tracks()
             return [tidal_item(t.name) for t in tracks]
-        
+
         return []
 
     def _distinct_from_search(self, field: str, query: dict) -> list[str]:
@@ -53,9 +53,7 @@ class TidalLibraryProvider(backend.LibraryProvider):
             return [tidal_item(t.name) for t in results.get("tracks", [])]
         return []
 
-    @login_required(
-        lambda b: [Ref.directory(uri="tidal:directory", name=f"Visit {b._login_url} to log in")]
-    )
+    @login_required(lambda b: [Ref.directory(uri="tidal:directory", name=f"Visit {b._login_url} to log in")])
     def browse(self, uri: str) -> list[Ref]:
         logger.debug("TidalLibraryProvider.browse %s", uri)
         try:
@@ -80,10 +78,7 @@ class TidalLibraryProvider(backend.LibraryProvider):
         }
 
         if parsed.type == URIType.DIRECTORY:
-            return [
-                Ref.directory(uri=str(URI(name)), name=name.replace("_", " ").title())
-                for name in summaries
-            ]
+            return [Ref.directory(uri=str(URI(name)), name=name.replace("_", " ").title()) for name in summaries]
 
         summary = summaries.get(parsed.type)
         if summary:
@@ -104,9 +99,14 @@ class TidalLibraryProvider(backend.LibraryProvider):
         exact: bool = False,
     ) -> SearchResult:
         total = self.backend.pagination_max_results
-        return SearchResult(**tidal_search(
-            self.backend.session, query=query, total=total, exact=exact,
-        ))
+        return SearchResult(
+            **tidal_search(
+                self.backend.session,
+                query=query,
+                total=total,
+                exact=exact,
+            )
+        )
 
     def get_images(self, uris: list[str]) -> dict[str, list]:
         result: dict[str, list] = {}
@@ -124,9 +124,7 @@ class TidalLibraryProvider(backend.LibraryProvider):
         tracks = []
         for uri in uris:
             try:
-                tracks.extend(
-                    t.full for t in lookup_uri(self.backend.session, uri).tracks()
-                )
+                tracks.extend(t.full for t in lookup_uri(self.backend.session, uri).tracks())
             except (ValueError, NotFoundError, TidalError):
                 logger.warning("Lookup failed for: %s", uri)
         return tracks

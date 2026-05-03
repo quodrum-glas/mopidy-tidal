@@ -51,9 +51,9 @@ class TestBackoffOnError:
             raise ValueError
 
         with patch("mopidy_tidal.helpers.time.monotonic", side_effect=lambda: t[0]):
-            flaky()          # fails at t=0, cooldown until t=5
+            flaky()  # fails at t=0, cooldown until t=5
             t[0] = 6.0
-            flaky()          # t=6 > 5, should call again (and fail again)
+            flaky()  # t=6 > 5, should call again (and fail again)
 
         # If it was suppressed, the second call wouldn't log a warning.
         # We just verify it doesn't raise — both return None.
@@ -72,11 +72,11 @@ class TestBackoffOnError:
 
         t = [0.0]
         with patch("mopidy_tidal.helpers.time.monotonic", side_effect=lambda: t[0]):
-            maybe()           # fails at t=0
+            maybe()  # fails at t=0
             t[0] = 200.0
             fail[0] = False
             assert maybe() == "ok"
-            t[0] = 200.1      # immediately after — no cooldown
+            t[0] = 200.1  # immediately after — no cooldown
             assert maybe() == "ok"
             assert calls == 3
 
@@ -105,9 +105,7 @@ class TestToTimestamp:
 
     def test_today_string(self):
         result = to_timestamp("today")
-        expected = int(datetime.datetime.combine(
-            datetime.datetime.now().date(), datetime.time.min,
-        ).timestamp())
+        expected = int(datetime.datetime.combine(datetime.datetime.now().date(), datetime.time.min).timestamp())
         assert result == expected
 
     def test_today_case_insensitive(self):

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from mopidy.models import Album as MopidyAlbum, Image as MopidyImage, Ref as MopidyRef
+from mopidy.models import Album as MopidyAlbum
+from mopidy.models import Image as MopidyImage
+from mopidy.models import Ref as MopidyRef
 from tidalapi import Session as TidalSession
 from tidalapi.models import Album as TidalAlbum
 from tidalapi.models_v1 import Album as TidalAlbumV1
@@ -61,30 +63,36 @@ class Album(Model):
 
         result: list[Model] = []
         if self.session:
-            result.append(Future.from_v1(
-                lambda: self.session.get_album_page(int(self.api.id)),
-                ref_type=MopidyRef.DIRECTORY, title=f"Page: {self.name}"))
+            result.append(
+                Future.from_v1(
+                    lambda: self.session.get_album_page(int(self.api.id)),
+                    ref_type=MopidyRef.DIRECTORY,
+                    title=f"Page: {self.name}",
+                )
+            )
             if self.artists:
                 result.extend(
                     Future.from_v1(
                         lambda aid=int(a.api.id): self.session.get_artist_page(aid),
-                        ref_type=MopidyRef.DIRECTORY, title=f"Artist: {a.name}")
+                        ref_type=MopidyRef.DIRECTORY,
+                        title=f"Artist: {a.name}",
+                    )
                     for a in self.artists
                 )
-            result.append(Future.from_v1(
-                lambda: self.api.similar_albums,
-                ref_type=MopidyRef.DIRECTORY, title=f"Similar: {self.name}"))
+            result.append(
+                Future.from_v1(
+                    lambda: self.api.similar_albums, ref_type=MopidyRef.DIRECTORY, title=f"Similar: {self.name}"
+                )
+            )
 
         result.extend(self.tracks())
         return result
 
     def tracks(self) -> list[Track]:
         from .track import Track
+
         if self.session:
-            return [
-                Track.from_api(t, album=self)
-                for t in self.session.get_album_tracks(int(self.api.id))
-            ]
+            return [Track.from_api(t, album=self) for t in self.session.get_album_tracks(int(self.api.id))]
         return [Track.from_api(t) for t in self.api.tracks]
 
     @property

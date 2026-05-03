@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from mopidy.models import Playlist as MopidyPlaylist, Ref as MopidyRef
+from mopidy.models import Playlist as MopidyPlaylist
+from mopidy.models import Ref as MopidyRef
 from tidalapi import Session as TidalSession
 
 from mopidy_tidal.cache import cache_future, cached_future

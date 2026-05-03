@@ -52,7 +52,6 @@ def start_oauth_daemon(
 
 
 class HTTPHandler(BaseHTTPRequestHandler):
-
     def __init__(
         self,
         login_handler: LoginHandler,
@@ -66,9 +65,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
         interactive = INTERACTIVE_HTML_BODY if self.login_handler.is_pkce else ""
-        self.wfile.write(
-            HTML_BODY(authurl=self.login_handler.get_login_url(), interactive=interactive).encode()
-        )
+        self.wfile.write(HTML_BODY(authurl=self.login_handler.get_login_url(), interactive=interactive).encode())
 
     def do_POST(self) -> None:
         content_length = int(self.headers.get("Content-Length", 0))

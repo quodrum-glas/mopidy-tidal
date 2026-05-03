@@ -49,17 +49,13 @@ def _generate_mpd_xml(mpd: MPEGDASH, proxy_prefix: str, selected_rep_ids: set[st
     for period in mpd.periods:
         for adapt in period.adaptation_sets:
             adapt.content_protections = None
-            adapt.representations = [
-                r for r in adapt.representations if r.id in selected_rep_ids
-            ]
+            adapt.representations = [r for r in adapt.representations if r.id in selected_rep_ids]
             for rep in adapt.representations:
                 logger.debug(f"Representation served: {rep.id}")
                 for seg in rep.segment_templates or []:
                     if seg.initialization is None or seg.media is None:
                         raise ValueError("SegmentTemplate missing 'initialization' or 'media'")
-                    seg.initialization = seg.initialization.replace(
-                        "https://", proxy_prefix, 1
-                    )
+                    seg.initialization = seg.initialization.replace("https://", proxy_prefix, 1)
                     seg.media = seg.media.replace("https://", proxy_prefix, 1)
     return MPEGDASHParser.get_as_doc(mpd).toxml()
 
@@ -67,6 +63,7 @@ def _generate_mpd_xml(mpd: MPEGDASH, proxy_prefix: str, selected_rep_ids: set[st
 # ---------------------------------------------------------------------------
 # Handler
 # ---------------------------------------------------------------------------
+
 
 class _Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -95,7 +92,10 @@ class _Handler(BaseHTTPRequestHandler):
     do_HEAD = do_GET
 
     def _reply(
-        self, data: bytes, hdrs: dict[str, str] | None = None, code: int = 200,
+        self,
+        data: bytes,
+        hdrs: dict[str, str] | None = None,
+        code: int = 200,
     ) -> None:
         self.send_response(code)
         for k, v in (hdrs or {"Content-Type": "text/plain"}).items():
@@ -115,6 +115,7 @@ class _Handler(BaseHTTPRequestHandler):
 # ---------------------------------------------------------------------------
 # Server
 # ---------------------------------------------------------------------------
+
 
 class DrmServer(HTTPServer):
     """Decrypting reverse proxy server.
@@ -190,7 +191,9 @@ class DrmServer(HTTPServer):
 
     def start(self) -> None:
         threading.Thread(
-            target=self._serve, name="TidalDrmProxy", daemon=True,
+            target=self._serve,
+            name="TidalDrmProxy",
+            daemon=True,
         ).start()
         logger.debug("proxy on %s", self.base_url)
 

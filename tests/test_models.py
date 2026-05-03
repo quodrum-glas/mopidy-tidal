@@ -90,7 +90,6 @@ class TestYearFrom:
         assert _year_from("") is None
 
 
-
 class TestModelBase:
     def test_ref_and_api(self):
         ref = mm.Ref.track(uri="tidal:track:1", name="T")

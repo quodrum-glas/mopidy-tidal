@@ -38,6 +38,7 @@ def _clear_caches():
 
 # -- cache_by_uri ---------------------------------------------------------
 
+
 class TestCacheByUri:
     def test_stores_in_model_cache(self):
         @cache_by_uri
@@ -71,6 +72,7 @@ class TestCacheByUri:
 
 # -- cached_by_uri --------------------------------------------------------
 
+
 class TestCachedByUri:
     def test_caches_by_uri_kwarg(self):
         calls = 0
@@ -100,6 +102,7 @@ class TestCachedByUri:
 
 
 # -- cached_items ---------------------------------------------------------
+
 
 class TestCachedItems:
     def test_caches_by_uri_and_last_modified(self):
@@ -133,6 +136,7 @@ class TestCachedItems:
 
 
 # -- cache_future / cached_future -----------------------------------------
+
 
 class TestCacheFuture:
     def test_stores_in_futures_cache(self):
@@ -169,6 +173,7 @@ class TestCachedFuture:
 
 # -- cache isolation ------------------------------------------------------
 
+
 class TestCacheIsolation:
     def test_model_and_futures_are_separate(self):
         @cache_by_uri
@@ -187,6 +192,7 @@ class TestCacheIsolation:
 
 
 # -- cache_by_uri_if ------------------------------------------------------
+
 
 class TestCacheByUriIf:
     def test_caches_when_check_passes(self):

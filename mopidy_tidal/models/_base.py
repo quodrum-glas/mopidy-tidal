@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from mopidy.models import Image as MopidyImage, Ref as MopidyRef
+from mopidy.models import Image as MopidyImage
+from mopidy.models import Ref as MopidyRef
 
 from mopidy_tidal.helpers import to_timestamp
 

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from mopidy.models import Image as MopidyImage, Playlist as MopidyPlaylist, Ref as MopidyRef
+from mopidy.models import Image as MopidyImage
+from mopidy.models import Playlist as MopidyPlaylist
+from mopidy.models import Ref as MopidyRef
 from tidalapi import Session as TidalSession
-from tidalapi.models_v1 import Mix as TidalMixV1, Track as TidalTrackV1
+from tidalapi.models_v1 import Mix as TidalMixV1
+from tidalapi.models_v1 import Track as TidalTrackV1
 
 from mopidy_tidal.helpers import to_timestamp
 from mopidy_tidal.uri import URI, URIType
@@ -47,11 +50,7 @@ class Mix(Model):
         return self.tracks()
 
     def tracks(self) -> list[Track]:
-        return [
-            Track.from_api(item)
-            for item in self.api.items()
-            if isinstance(item, TidalTrackV1)
-        ]
+        return [Track.from_api(item) for item in self.api.items() if isinstance(item, TidalTrackV1)]
 
     @property
     def images(self) -> list[MopidyImage] | None:

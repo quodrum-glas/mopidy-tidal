@@ -22,20 +22,44 @@ from collections.abc import Iterator
 from tidalapi import Session as TidalSession
 from tidalapi.models import (
     Album as TidalAlbum,
+)
+from tidalapi.models import (
     Artist as TidalArtist,
+)
+from tidalapi.models import (
     Playlist as TidalPlaylist,
+)
+from tidalapi.models import (
     Track as TidalTrack,
 )
 from tidalapi.models_v1 import (
     Album as TidalAlbumV1,
+)
+from tidalapi.models_v1 import (
     Artist as TidalArtistV1,
+)
+from tidalapi.models_v1 import (
     Mix as TidalMixV1,
+)
+from tidalapi.models_v1 import (
     Page as TidalPageV1,
+)
+from tidalapi.models_v1 import (
     PageItem as TidalPageItemV1,
+)
+from tidalapi.models_v1 import (
     PageLink as TidalPageLinkV1,
+)
+from tidalapi.models_v1 import (
     Playlist as TidalPlaylistV1,
+)
+from tidalapi.models_v1 import (
     RoleItem as TidalRoleItemV1,
+)
+from tidalapi.models_v1 import (
     Track as TidalTrackV1,
+)
+from tidalapi.models_v1 import (
     Video as TidalVideoV1,
 )
 
@@ -101,6 +125,7 @@ def model_factory_map(iterable: object) -> Iterator[Model]:
                 yield model
         except ValueError as e:
             logger.error(e)
+
 
 def lookup_uri(session: TidalSession, uri: str) -> Model:
     uri = str(uri)

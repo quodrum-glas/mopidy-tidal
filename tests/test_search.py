@@ -33,17 +33,13 @@ class TestTidalSearch:
     def test_track_name_only_searches_tracks(self):
         session = self._mock_session(tracks=[])
         session.get_tracks.return_value = []
-        result = tidal_search(
-            session, query={"track_name": ["unique song xyz"]}, total=10, exact=False,
-        )
+        result = tidal_search(session, query={"track_name": ["unique song xyz"]}, total=10, exact=False)
         # track_name alone → only "tracks" in include, so single-type path
         assert "albums" not in result or result.get("albums") == []
 
     def test_artist_query_searches_artists(self):
         session = self._mock_session(artists=[], tracks=[], albums=[], playlists=[])
-        result = tidal_search(
-            session, query={"artist": ["unique artist xyz"]}, total=10, exact=False,
-        )
+        result = tidal_search(session, query={"artist": ["unique artist xyz"]}, total=10, exact=False)
         # artist field triggers want_artists
         assert isinstance(result, dict)
 
@@ -58,7 +54,5 @@ class TestTidalSearch:
             mock_model = MagicMock()
             mock_model.full = "full_track"
             mock_mf.return_value = mock_model
-            result = tidal_search(
-                session, query={"track_name": ["unique result test"]}, total=10, exact=False,
-            )
+            result = tidal_search(session, query={"track_name": ["unique result test"]}, total=10, exact=False)
             assert "tracks" in result

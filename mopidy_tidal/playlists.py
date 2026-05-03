@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 def _intercept_injected(fn):
     """Route injected playlist URIs — save calls action & stores, lookup/get_items read state."""
+
     @wraps(fn)
     def wrapper(self, uri_or_playlist: str | Playlist, *args: Any, **kwargs: Any) -> Any:
         uri = uri_or_playlist.uri if isinstance(uri_or_playlist, Playlist) else uri_or_playlist
@@ -38,20 +39,18 @@ def _intercept_injected(fn):
         if fn.__name__ == "get_items":
             return [Ref.track(uri=t.uri, name=t.name) for t in self._injected[name].tracks]
         return fn(self, uri_or_playlist, *args, **kwargs)
+
     return wrapper
 
 
 class TidalPlaylistsProvider(PlaylistsProvider):
-
     def __init__(self, *args: object, playlist_cache_ttl: int, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
         self.__as_list_cache: TTLCache = TTLCache(maxsize=1, ttl=playlist_cache_ttl)
         self._injected_actions: dict[str, Callable] = {
             "radio": self._get_radio,
         }
-        self._injected: dict[str, Playlist] = {
-            name: _empty(name) for name in self._injected_actions
-        }
+        self._injected: dict[str, Playlist] = {name: _empty(name) for name in self._injected_actions}
 
     # -- list / browse ----------------------------------------------------
 
@@ -59,20 +58,14 @@ class TidalPlaylistsProvider(PlaylistsProvider):
     @cachedmethod(lambda self: self.__as_list_cache)
     def as_list(self) -> list[Ref]:
         session = self.backend.session
-        
+
         # Use enhanced oapi user playlists
         results = session.get_user_playlists()
         logger.debug("Using enhanced oapi user playlists: %d items", len(results))
-            
+
         return [
-            *(
-                m.ref.replace(name=tidal_item(m.ref.name))
-                for m in model_factory_map(results)
-            ),
-            *(
-                Ref.playlist(uri=pl.uri, name=tidal_item(alert_item(pl.name)))
-                for pl in self._injected.values()
-            ),
+            *(m.ref.replace(name=tidal_item(m.ref.name)) for m in model_factory_map(results)),
+            *(Ref.playlist(uri=pl.uri, name=tidal_item(alert_item(pl.name))) for pl in self._injected.values()),
         ]
 
     @_intercept_injected

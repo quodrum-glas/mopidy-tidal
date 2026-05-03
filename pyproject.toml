@@ -57,10 +57,15 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E402", "SIM105"]
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true
 
 [tool.ruff.lint.isort]
 known-first-party = ["mopidy_tidal"]
 force-single-line = false
+split-on-trailing-comma = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

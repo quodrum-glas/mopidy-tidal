@@ -19,14 +19,14 @@ Usage:
 import struct
 from dataclasses import dataclass
 
-_CONTAINERS = frozenset({b"moov", b"trak", b"mdia", b"minf", b"stbl",
-                         b"mvex", b"moof", b"traf"})
+_CONTAINERS = frozenset({b"moov", b"trak", b"mdia", b"minf", b"stbl", b"mvex", b"moof", b"traf"})
 _ENC_BOXES = frozenset({b"senc", b"saiz", b"saio", b"sbgp", b"sgpd"})
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 @dataclass(slots=True)
 class EncryptionParams:
@@ -62,8 +62,11 @@ def decrypt_segment(segment: bytes, params: EncryptionParams) -> bytes:
     """Decrypt and clean a media segment. Returns a valid non-encrypted fMP4
     fragment with mdat decrypted and all encryption boxes removed from moof."""
     return _clean_segment(
-        segment, params.key, params.constant_iv,
-        params.crypt_byte_block, params.skip_byte_block,
+        segment,
+        params.key,
+        params.constant_iv,
+        params.crypt_byte_block,
+        params.skip_byte_block,
         params.per_sample_iv_size,
     )
 
@@ -71,6 +74,7 @@ def decrypt_segment(segment: bytes, params: EncryptionParams) -> bytes:
 # ---------------------------------------------------------------------------
 # tenc / trun / tfhd / senc parsing
 # ---------------------------------------------------------------------------
+
 
 def _parse_tenc(init_data: bytes) -> tuple[bytes, int, int, int]:
     """Extract encryption defaults from init segment's tenc box.
@@ -91,13 +95,16 @@ def _parse_tenc(init_data: bytes) -> tuple[bytes, int, int, int]:
     else:
         crypt_byte_block = skip_byte_block = 0
     off += 1
-    is_protected = init_data[off]; off += 1
-    per_sample_iv_size = init_data[off]; off += 1
+    is_protected = init_data[off]
+    off += 1
+    per_sample_iv_size = init_data[off]
+    off += 1
     off += 16  # defaultKID
     constant_iv = b""
     if per_sample_iv_size == 0 and is_protected:
-        const_iv_size = init_data[off]; off += 1
-        constant_iv = init_data[off:off + const_iv_size]
+        const_iv_size = init_data[off]
+        off += 1
+        constant_iv = init_data[off : off + const_iv_size]
     elif not is_protected:
         raise ValueError(f"tenc: not protected (isProtected={is_protected})")
     return constant_iv, per_sample_iv_size, crypt_byte_block, skip_byte_block
@@ -113,8 +120,8 @@ def _parse_trun(segment: bytes) -> tuple[int, list[int]]:
     if pos < 4:
         raise ValueError("No trun box")
     trun_off = pos - 4
-    flags = struct.unpack(">I", segment[trun_off + 8:trun_off + 12])[0] & 0xFFFFFF
-    count = struct.unpack(">I", segment[trun_off + 12:trun_off + 16])[0]
+    flags = struct.unpack(">I", segment[trun_off + 8 : trun_off + 12])[0] & 0xFFFFFF
+    count = struct.unpack(">I", segment[trun_off + 12 : trun_off + 16])[0]
     off = trun_off + 16
     if flags & 0x1:
         off += 4  # data_offset
@@ -125,7 +132,7 @@ def _parse_trun(segment: bytes) -> tuple[int, list[int]]:
         if flags & 0x100:
             off += 4  # sample_duration
         if flags & 0x200:
-            sizes.append(struct.unpack(">I", segment[off:off + 4])[0])
+            sizes.append(struct.unpack(">I", segment[off : off + 4])[0])
             off += 4
         if flags & 0x400:
             off += 4  # sample_flags
@@ -140,7 +147,7 @@ def _parse_tfhd_default_size(segment: bytes) -> int:
     if pos < 4:
         return 0
     tfhd_off = pos - 4
-    flags = struct.unpack(">I", segment[tfhd_off + 8:tfhd_off + 12])[0] & 0xFFFFFF
+    flags = struct.unpack(">I", segment[tfhd_off + 8 : tfhd_off + 12])[0] & 0xFFFFFF
     off = tfhd_off + 16  # past size + type + ver/flags + track_id
     if flags & 0x1:
         off += 8  # base_data_offset
@@ -149,7 +156,7 @@ def _parse_tfhd_default_size(segment: bytes) -> int:
     if flags & 0x8:
         off += 4  # default_sample_duration
     if flags & 0x10:
-        return struct.unpack(">I", segment[off:off + 4])[0]
+        return struct.unpack(">I", segment[off : off + 4])[0]
     return 0
 
 
@@ -159,15 +166,15 @@ def _parse_senc(segment: bytes, sample_count: int, iv_size: int) -> list[bytes]:
     if pos < 4:
         return []
     senc_off = pos - 4
-    flags = struct.unpack(">I", segment[senc_off + 8:senc_off + 12])[0] & 0xFFFFFF
-    count = struct.unpack(">I", segment[senc_off + 12:senc_off + 16])[0]
+    flags = struct.unpack(">I", segment[senc_off + 8 : senc_off + 12])[0] & 0xFFFFFF
+    count = struct.unpack(">I", segment[senc_off + 12 : senc_off + 16])[0]
     off = senc_off + 16
     ivs = []
     for _ in range(min(count, sample_count)):
-        ivs.append(segment[off:off + iv_size])
+        ivs.append(segment[off : off + iv_size])
         off += iv_size
         if flags & 0x2:  # subsample encryption
-            n_sub = struct.unpack(">H", segment[off:off + 2])[0]
+            n_sub = struct.unpack(">H", segment[off : off + 2])[0]
             off += 2 + n_sub * 6
     return ivs
 
@@ -186,6 +193,7 @@ def _get_sample_sizes(segment: bytes) -> list[int]:
 # ---------------------------------------------------------------------------
 # CBCS decryption
 # ---------------------------------------------------------------------------
+
 
 def _decrypt_cbcs(
     mdat_body: bytes,
@@ -211,7 +219,7 @@ def _decrypt_cbcs(
     out = bytearray()
     off = 0
     for i, sz in enumerate(sample_sizes):
-        sample = mdat_body[off:off + sz]
+        sample = mdat_body[off : off + sz]
         iv = per_sample_ivs[i] if i < len(per_sample_ivs) else constant_iv
         if len(iv) < 16:
             iv = iv + b"\x00" * (16 - len(iv))
@@ -232,11 +240,11 @@ def _decrypt_cbcs(
                 avail = len(sample) - pos
                 n = min(enc_bytes, avail // 16 * 16)
                 if n:
-                    dec.extend(cipher.decrypt(sample[pos:pos + n]))
+                    dec.extend(cipher.decrypt(sample[pos : pos + n]))
                     pos += n
                 # Clear portion
                 n = min(skip_bytes, len(sample) - pos)
-                dec.extend(sample[pos:pos + n])
+                dec.extend(sample[pos : pos + n])
                 pos += n
             dec.extend(sample[pos:])  # trailing sub-block bytes
             out.extend(dec)
@@ -248,20 +256,22 @@ def _decrypt_cbcs(
 # MP4 box surgery
 # ---------------------------------------------------------------------------
 
+
 def _fixup_sizes(data: bytes) -> bytes:
     """Recompute all container box sizes bottom-up."""
+
     def _rebuild(buf: bytes) -> bytes:
         out = bytearray()
         off = 0
         while off + 8 <= len(buf):
-            size = struct.unpack(">I", buf[off:off + 4])[0]
-            btype = buf[off + 4:off + 8]
+            size = struct.unpack(">I", buf[off : off + 4])[0]
+            btype = buf[off + 4 : off + 8]
             if size < 8:
                 out.extend(buf[off:])
                 break
             end = min(off + size, len(buf))
             if btype in _CONTAINERS:
-                children = _rebuild(buf[off + 8:end])
+                children = _rebuild(buf[off + 8 : end])
                 out.extend(struct.pack(">I", 8 + len(children)))
                 out.extend(btype)
                 out.extend(children)
@@ -269,6 +279,7 @@ def _fixup_sizes(data: bytes) -> bytes:
                 out.extend(buf[off:end])
             off += size
         return bytes(out)
+
     return _rebuild(data)
 
 
@@ -277,13 +288,13 @@ def _strip_enc_boxes(buf: bytes) -> bytes:
     out = bytearray()
     off = 0
     while off + 8 <= len(buf):
-        size = struct.unpack(">I", buf[off:off + 4])[0]
-        btype = buf[off + 4:off + 8]
+        size = struct.unpack(">I", buf[off : off + 4])[0]
+        btype = buf[off + 4 : off + 8]
         if size < 8 or off + size > len(buf):
             out.extend(buf[off:])
             break
         if btype not in _ENC_BOXES:
-            out.extend(buf[off:off + size])
+            out.extend(buf[off : off + size])
         off += size
     return bytes(out)
 
@@ -295,7 +306,7 @@ def _clean_init(init_data: bytes) -> bytes:
         return init_data
 
     enca_off = enca_pos - 4
-    enca_size = struct.unpack(">I", init_data[enca_off:enca_off + 4])[0]
+    enca_size = struct.unpack(">I", init_data[enca_off : enca_off + 4])[0]
 
     original_format = b"fLaC"
     sinf_pos = init_data.find(b"sinf", enca_off, enca_off + enca_size)
@@ -303,12 +314,12 @@ def _clean_init(init_data: bytes) -> bytes:
     if sinf_pos >= 4:
         frma_pos = init_data.find(b"frma", sinf_pos, enca_off + enca_size)
         if frma_pos >= 0:
-            original_format = init_data[frma_pos + 4:frma_pos + 8]
+            original_format = init_data[frma_pos + 4 : frma_pos + 8]
 
         sinf_off = sinf_pos - 4
-        sinf_size = struct.unpack(">I", init_data[sinf_off:sinf_off + 4])[0]
+        sinf_size = struct.unpack(">I", init_data[sinf_off : sinf_off + 4])[0]
         # Remove sinf bytes
-        init_data = init_data[:sinf_off] + init_data[sinf_off + sinf_size:]
+        init_data = init_data[:sinf_off] + init_data[sinf_off + sinf_size :]
 
     if sinf_size:
         # Subtract sinf_size from enca and all ancestor containers.
@@ -317,17 +328,13 @@ def _clean_init(init_data: bytes) -> bytes:
             pos = init_data.find(tag)
             if pos >= 4:
                 off = pos - 4
-                old = struct.unpack(">I", init_data[off:off + 4])[0]
-                init_data = (
-                    init_data[:off]
-                    + struct.pack(">I", old - sinf_size)
-                    + init_data[off + 4:]
-                )
+                old = struct.unpack(">I", init_data[off : off + 4])[0]
+                init_data = init_data[:off] + struct.pack(">I", old - sinf_size) + init_data[off + 4 :]
 
     # Rename enca -> original format (after size fixup)
     enca_pos = init_data.find(b"enca")
     if enca_pos >= 0:
-        init_data = init_data[:enca_pos] + original_format + init_data[enca_pos + 4:]
+        init_data = init_data[:enca_pos] + original_format + init_data[enca_pos + 4 :]
 
     return init_data
 
@@ -355,12 +362,17 @@ def _clean_segment(
     if mdat_pos < 4:
         raise ValueError("No mdat box")
     mdat_off = mdat_pos - 4
-    mdat_size = struct.unpack(">I", segment[mdat_off:mdat_off + 4])[0]
-    mdat_body = segment[mdat_off + 8:mdat_off + mdat_size]
+    mdat_size = struct.unpack(">I", segment[mdat_off : mdat_off + 4])[0]
+    mdat_body = segment[mdat_off + 8 : mdat_off + mdat_size]
 
     dec_body = _decrypt_cbcs(
-        mdat_body, sample_sizes, key, constant_iv,
-        per_sample_ivs, crypt_byte_block, skip_byte_block,
+        mdat_body,
+        sample_sizes,
+        key,
+        constant_iv,
+        per_sample_ivs,
+        crypt_byte_block,
+        skip_byte_block,
     )
 
     # Rebuild moof without encryption boxes
@@ -368,18 +380,18 @@ def _clean_segment(
     new_body = bytearray()
     off = 8  # skip moof header
     while off + 8 <= len(moof_data):
-        size = struct.unpack(">I", moof_data[off:off + 4])[0]
-        btype = moof_data[off + 4:off + 8]
+        size = struct.unpack(">I", moof_data[off : off + 4])[0]
+        btype = moof_data[off + 4 : off + 8]
         if size < 8 or off + size > len(moof_data):
             new_body.extend(moof_data[off:])
             break
         if btype == b"traf":
-            stripped = _strip_enc_boxes(moof_data[off + 8:off + size])
+            stripped = _strip_enc_boxes(moof_data[off + 8 : off + size])
             new_body.extend(struct.pack(">I", 8 + len(stripped)))
             new_body.extend(b"traf")
             new_body.extend(stripped)
         else:
-            new_body.extend(moof_data[off:off + size])
+            new_body.extend(moof_data[off : off + size])
         off += size
 
     new_moof = struct.pack(">I", 8 + len(new_body)) + b"moof" + bytes(new_body)
@@ -388,13 +400,9 @@ def _clean_segment(
     trun_pos = new_moof.find(b"trun")
     if trun_pos >= 4:
         trun_off = trun_pos - 4
-        flags = struct.unpack(">I", new_moof[trun_off + 8:trun_off + 12])[0] & 0xFFFFFF
+        flags = struct.unpack(">I", new_moof[trun_off + 8 : trun_off + 12])[0] & 0xFFFFFF
         if flags & 0x1:
             do_off = trun_off + 16
-            new_moof = (
-                new_moof[:do_off]
-                + struct.pack(">i", len(new_moof) + 8)
-                + new_moof[do_off + 4:]
-            )
+            new_moof = new_moof[:do_off] + struct.pack(">i", len(new_moof) + 8) + new_moof[do_off + 4 :]
 
     return new_moof + struct.pack(">I", 8 + len(dec_body)) + b"mdat" + dec_body

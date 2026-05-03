@@ -109,7 +109,7 @@ class TestProperties:
     def test_wrong_property_raises(self):
         u = URI(URIType.TRACK, "1")
         with pytest.raises(AttributeError):
-            u.album
+            _ = u.album
 
 
 class TestGetattr:
@@ -128,4 +128,4 @@ class TestGetattr:
     def test_unknown_attr_raises(self):
         u = URI(URIType.TRACK, "1")
         with pytest.raises(AttributeError):
-            u.nonexistent
+            _ = u.nonexistent

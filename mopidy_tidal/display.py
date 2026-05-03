@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from tidalapi import Quality
 
-HIRES = "\U0001F1A8"       # 🆨  HI_RES_LOSSLESS
-LOSSLESS = "\U0001F1A9"    # 🆩  LOSSLESS
-HIGH = "\U000025B3"        # △ HIGH
-LOW = "\U000025BC"         # ▼  LOW
-TIDAL = "\U0001F163"       # 🅣  generic tidal item
-STAR = "\u229B"            # ⊛  favorite
-FEAT = "\u24BB"            # Ⓕ  featured
-WARNING = "\u26A0"         # ⚠  alert
-EXCLAMATION = "\U00002049" # ⁉  exclamation
+HIRES = "\U0001f1a8"  # 🆨  HI_RES_LOSSLESS
+LOSSLESS = "\U0001f1a9"  # 🆩  LOSSLESS
+HIGH = "\U000025b3"  # △ HIGH
+LOW = "\U000025bc"  # ▼  LOW
+TIDAL = "\U0001f163"  # 🅣  generic tidal item
+STAR = "\u229b"  # ⊛  favorite
+FEAT = "\u24bb"  # Ⓕ  featured
+WARNING = "\u26a0"  # ⚠  alert
+EXCLAMATION = "\U00002049"  # ⁉  exclamation
 
 _QUALITY_BADGE: dict[str, str] = {
     Quality.HI_RES_LOSSLESS.value: HIRES,

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 
-from mopidy.models import Image as MopidyImage, Ref as MopidyRef, Track as MopidyTrack
+from mopidy.models import Image as MopidyImage
+from mopidy.models import Ref as MopidyRef
+from mopidy.models import Track as MopidyTrack
 from tidalapi import Session as TidalSession
 from tidalapi.models import Track as TidalTrack
 from tidalapi.models_v1 import Track as TidalTrackV1
@@ -18,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class Track(Model):
     @classmethod
-    @cache_by_uri_if(lambda result: getattr(result.api, 'artists', None))
+    @cache_by_uri_if(lambda result: getattr(result.api, "artists", None))
     def from_api(cls, track: TidalTrack | TidalTrackV1, **kwargs) -> Track:
         """From any tidal track model (v1 or oapi). Cached only if complete."""
         uri = URI(URIType.TRACK, track.id)
@@ -46,14 +48,14 @@ class Track(Model):
     @property
     def artists(self) -> list:
         from .artist import Artist
+
         return [Artist.from_api(a) for a in self.api.artists]
 
     @property
     def album(self):
         from .album import Album
-        return self.__dict__.get('album') or (
-            Album.from_api(self.api.album) if self.api.album else None
-        )
+
+        return self.__dict__.get("album") or (Album.from_api(self.api.album) if self.api.album else None)
 
     def items(self) -> list:
         raise AttributeError
