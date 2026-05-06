@@ -1,7 +1,7 @@
 #!/bin/bash
 # Audiophile Arch Linux Development Setup
 # Installs system packages for mopidy-tidal development
-# Run as: sudo ./setup-dev-env.sh
+# Run as: sudo ./install-dependencies.sh
 
 set -e
 
@@ -19,7 +19,7 @@ echo "👤 Installing for user: $ORIG_USER"
 
 # Core Python and Mopidy
 echo "📦 Installing core packages..."
-pacman -S --needed python python-pip mopidy python-requests
+pacman -S --needed python python-pip mopidy python-requests python-mpegdash
 
 # Audio/media dependencies
 echo "🔊 Installing GStreamer and audio plugins..."

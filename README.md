@@ -1,153 +1,58 @@
 # Mopidy-Tidal
 
-[![Latest PyPI version](https://img.shields.io/pypi/v/Mopidy-Tidal.svg?style=flat)](https://github.com/tehkillerbee/mopidy-tidal)
-[![Number of PyPI downloads](https://img.shields.io/pypi/dm/Mopidy-Tidal.svg?style=flat)](https://github.com/tehkillerbee/mopidy-tidal)
-[![codecov](https://codecov.io/gh/tehkillerbee/mopidy-tidal/branch/master/graph/badge.svg?token=cTJDQ646wy)](https://codecov.io/gh/tehkillerbee/mopidy-tidal)
+Mopidy extension for Tidal music service integration.
 
-Mopidy Extension for Tidal music service integration.
+This is a fork of [tehkillerbee/mopidy-tidal](https://github.com/tehkillerbee/mopidy-tidal), referenced from the [Mopidy documentation](https://docs.mopidy.com/).
 
-### Changelog
-Find the latest changelog [here](CHANGELOG.md)
+Maintained by [quodrum-glas](https://github.com/quodrum-glas).
 
-### Contributions
-- Current maintainer: [tehkillerbee](https://github.com/tehkillerbee)
-- Original author: [mones88](https://github.com/mones88)
-- [Contributors](https://github.com/tehkillerbee/mopidy-tidal/graphs/contributors)
+## Installation
 
-Questions related to Mopidy-Tidal, feature suggestions, bug reports and Pull Requests are very welcome.
+Requires Python >= 3.10, Mopidy >= 3.0, and GStreamer (including bad plugins for m4a playback).
 
-If you are experiencing playback issues unrelated to this plugin, please report this to the Mopidy-Tidal issue tracker and/or check [Python-Tidal/Tidalapi repository](https://github.com/tamland/python-tidal) for relevant issues.
-
-### Development guidelines
-Please refer to [this document](DEVELOPMENT.md) to get you started.
-
-## Getting started
-First install and configure Mopidy as per the instructions listed [here](https://docs.mopidy.com/en/latest/installation/). It is encouraged to install Mopidy as a systemd service, as per the instructions listed [here](https://docs.mopidy.com/en/latest/running/service/).
-
-After installing Mopidy, you can now proceed installing the plugins that you require, including Mopidy-Tidal. :
+### From git
 ```
-python3 -m pip install -U 'git+https://github.com/quodrum-glas/mopidy-tidal.git@quodrumglas#egg=Mopidy-Tidal'
+pip install 'git+https://github.com/quodrum-glas/mopidy-tidal.git'
 ```
 
-Poetry can also be used to install mopidy-tidal and its dependencies.
-```
-cd <mopidy-tidal source root>
-poetry install
-```
+### Development setup (Arch Linux)
 
-##### Note: Make sure to install the Mopidy-Tidal plugin in the same python venv used by your Mopidy installation. Otherwise, the plugin will NOT be detected.
-
-### Install from latest sources
-In case you are upgrading your Mopidy-Tidal installation from the latest git sources, make sure to do a force upgrade from the source root (remove both mopidy-tidal and python-tidal), followed by a (service) restart.
-```
-cd <mopidy-tidal source root>
-sudo pip3 uninstall mopidy-tidal
-sudo pip3 uninstall tidalapi
-sudo pip3 install .
-sudo systemctl restart mopidy
+System dependencies and editable install:
+```bash
+sudo ./install-dependencies.sh
+sudo ./install-dev-packages.sh
 ```
 
 ## Dependencies
-### Python
 
-Released versions of Mopidy-Tidal have the same requirement as the Mopidy
-version they depend on.  Development code may depend on unreleased features.
-At the time of writing we require python >= 3.9 in anticipation of mopidy 3.5.0.
+- [tidalapi](https://github.com/quodrum-glas/python-tidal) — bundled Tidal API client (also a fork)
+- GStreamer bad plugins — required for m4a/AAC streams
 
-### Python-Tidal
-Mopidy-Tidal requires the Python-Tidal API (tidalapi) to function. This is usually installed automatically when installing Mopidy-Tidal.
-In some cases, Python-Tidal stops working due to Tidal changing their API keys.
+## Configuration
 
-When this happens, it will usually be necessary to upgrade the Python-Tidal API plugin manually
-```
-sudo pip3 install --upgrade tidalapi
-```
-
-After upgrading Python-Tidal/tidalapi, it will often be necessary to delete the existing json file and restart mopidy.
-The file is usually stored in `/var/lib/mopidy/tidal/tidal-oauth.json`, depending on your system configuration.
-
-### GStreamer
-When using High and Low quality, be sure to install gstreamer bad-plugins, e.g.:
-```
-sudo apt-get install gstreamer1.0-plugins-bad
-```
-This is mandatory to be able to play m4a streams.
-
-## Plugin Configuration
-
-Before starting Mopidy, you must add configuration for Mopidy-Tidal to your Mopidy configuration file, if it is not already present.
-
-Run `sudo mopidyctl config` to see the current effective config used by Mopidy
-
-The configuration is usually stored in `/etc/mopidy/mopidy.conf`, depending on your system configuration. Add the configuration listed below in the respective configuration file:
-```
+Add to your Mopidy configuration (usually `/etc/mopidy/mopidy.conf`):
+```ini
 [tidal]
 enabled = true
 quality = LOSSLESS
+client_id =
+client_secret =
+widevine_cdm_path =
+fetch_album_covers = false
 playlist_cache_refresh_secs = 300
 pagination_max_results = 40
 login_web_port = 8989
-client_id =
-client_secret =
+http_timeout = 3.05, 1.5
 ```
 
-Restart the Mopidy service after adding the Tidal configuration
-```
-sudo systemctl restart mopidy
-```
+**quality:** `HI_RES_LOSSLESS`, `LOSSLESS`, `HIGH`, or `LOW`. Must match your subscription tier. `HI_RES_LOSSLESS` is only available with PKCE login (client_id only, no client_secret).
 
-### Plugin configuration
-The plugin configuration is usually set in your mopidy configuration:
-```
-[tidal]
-enabled = true
-quality = LOSSLESS
-playlist_cache_refresh_secs = 300
-pagination_max_results = 40
-login_web_port = 8989
-client_id =
-client_secret =
-```
-* **quality:** Set to either HI_RES_LOSSLESS, LOSSLESS, HIGH or LOW. Make sure to use a quality level supported by your current subscription
+**widevine_cdm_path:** Path to a `.wvd` device file for DRM playback. Works with all quality levels. Non-DRM playback may stop working in the future.
 
-    * Note: `HI_RES_LOSSLESS` quality  (i.e. Max quality) requires a Tidal HiFi Plus subscription, while `LOSSLESS` quality (i.e. HiFi lossless) requires a HiFi subscription. However the API will not return `HI_RES_LOSSLESS` quality. For now best keep basic subscription.
+**playlist_cache_refresh_secs:** How long (seconds) a cached playlist is considered valid. `0` = never refresh automatically. Default `300`.
 
-* **playlist_cache_refresh_secs (Optional):** Tells if (and how often) playlist
-  content should be refreshed upon lookup.
-    * `0`: A value of `0` means that playlists won't be refreshed after the
-      extension has started, unless they are explicitly modified from mopidy.
-    * `>0` (default `300`): A non-zero value expresses for how long (in seconds) a cached playlist is
-      considered valid. For example, a value of `300` means that the cached snapshot
-      of a playlist will be used if a new `lookup` occurs within 5 minutes from the
-      previous one, but the playlist will be re-loaded via API if a lookup request
-      occurs later.
+**login_web_port:** Port for the OAuth login page.
 
-  The preferred setting for this value is a trade-off between UI responsiveness
-  and responsiveness to changes. If you perform a lot of playlist changes from
-  other clients and you want your playlists to be instantly updated on mopidy,
-  then you may choose a low value for this setting, albeit this will result in
-  longer waits when you look up a playlist, since it will be fetched from
-  upstream most of the times. If instead you don't perform many playlist
-  modifications, then you may choose a value for this setting within the range of
-  hours - or days, or even leave it to zero so playlists will only be refreshed
-  when mopidy restarts. This means that it will take longer for external changes
-  to be reflected in the loaded playlists, but the UI will be more responsive
-  when playlists are looked up. A value of zero makes the behaviour of
-  `mopidy-tidal` quite akin to the current behaviour of `mopidy-spotify`.
+### OAuth Login
 
-### OAuth Flow
-The first time you use the plugin, you will have to use the OAuth flow to login.:
-
-1. Visit in your browser `http://{server-IP}:{login_web_port}` and follow instructions
-
-##### Note: Login process is a **blocking** action, so Mopidy + Web interface will stop loading until you login or 5min, whichever earliest.
-
-If for some reason loading cached credentials fails, `mopidy-tidal` will restart
-the oauth flow (potentially blocking mopidy).  If connection failed for a
-network error and this new connection also fails, your cached credentials will
-not be overwritten.  There is, however, a potential race condition where the
-network comes back online after a failed connection and `mopidy-tidal`
-unnecessarily requests new credentials.  This bug has never been reported in the
-wild and is only mildly annoying, whereas any logic to detect it (for instance
-by inspecting the specific failure from `python-tidal`) would probably be more
-fragile.
+On startup, the extension displays a URL to visit for login. Authentication is non-blocking — Mopidy continues to load. Once login completes, the library updates to the online library.

@@ -9,7 +9,7 @@ description = "Tidal music service integration"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">= 3.10"
-authors = [{ name = "Johannes Linde", email = "josaksel.dk@gmail.com" }]
+authors = [{ name = "quodrum-glas" }]
 classifiers = [
     "Environment :: No Input/Output (Daemon)",
     "Intended Audience :: End Users/Desktop",
