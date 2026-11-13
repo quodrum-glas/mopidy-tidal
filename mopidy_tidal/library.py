@@ -10,8 +10,8 @@ from tidalapi.exceptions import NotFoundError, TidalError
 
 from mopidy_tidal.display import tidal_item
 from mopidy_tidal.helpers import login_required
-from mopidy_tidal.models import lookup_uri, model_factory_map
 from mopidy_tidal.search import tidal_search
+from mopidy_tidal.tidal import browse, build_track, build_tracks, get_images
 from mopidy_tidal.uri import URI, URIType
 
 _ARTIST_FIELDS = frozenset({"artist", "albumartist", "performer", "composer"})
@@ -30,17 +30,12 @@ class TidalLibraryProvider(backend.LibraryProvider):
         if query:
             return self._distinct_from_search(field, query)
 
-        # Use enhanced oapi user collection methods
         if field in _ARTIST_FIELDS:
-            artists = session.get_user_artists()
-            return [tidal_item(a.name) for a in artists]
+            return [tidal_item(a.name) for a in session.get_user_artists()]
         if field == "album":
-            albums = session.get_user_albums()
-            return [tidal_item(a.name) for a in albums]
+            return [tidal_item(a.name) for a in session.get_user_albums()]
         if field == "track":
-            tracks = session.get_user_tracks()
-            return [tidal_item(t.name) for t in tracks]
-
+            return [tidal_item(t.name) for t in session.get_user_tracks()]
         return []
 
     def _distinct_from_search(self, field: str, query: dict) -> list[str]:
@@ -57,39 +52,10 @@ class TidalLibraryProvider(backend.LibraryProvider):
     def browse(self, uri: str) -> list[Ref]:
         logger.debug("TidalLibraryProvider.browse %s", uri)
         try:
-            parsed = URI.from_string(uri)
-        except ValueError:
-            return []
-
-        session = self.backend.session
-
-        summaries = {
-            "home": session.home,
-            "explore": session.explore,
-            "for_you": session.for_you,
-            "hires": session.hires_page,
-            "genres": session.genres,
-            "moods": session.moods,
-            "mixes": session.mixes,
-            "my_artists": session.get_user_artists,
-            "my_albums": session.get_user_albums,
-            "my_playlists": session.get_user_playlists,
-            "my_tracks": session.get_user_tracks,
-        }
-
-        if parsed.type == URIType.DIRECTORY:
-            return [Ref.directory(uri=str(URI(name)), name=name.replace("_", " ").title()) for name in summaries]
-
-        summary = summaries.get(parsed.type)
-        if summary:
-            return [m.ref for m in model_factory_map(summary())]
-
-        try:
-            model = lookup_uri(session, uri)
+            return browse(self.backend.session, uri)
         except (ValueError, NotFoundError, TidalError):
             logger.warning("Browse request failed for: %s", uri)
             return []
-        return [item.ref for item in model.items()]
 
     @login_required(SearchResult())
     def search(self, query: dict | None = None, uris: list[str] | None = None, exact: bool = False) -> SearchResult:
@@ -100,7 +66,7 @@ class TidalLibraryProvider(backend.LibraryProvider):
         result: dict[str, list] = {}
         for uri in uris:
             try:
-                result[uri] = lookup_uri(self.backend.session, uri).images
+                result[uri] = get_images(self.backend.session, uri)
             except (ValueError, NotFoundError, TidalError):
                 result[uri] = []
         return result
@@ -112,7 +78,25 @@ class TidalLibraryProvider(backend.LibraryProvider):
         tracks = []
         for uri in uris:
             try:
-                tracks.extend(t.full for t in lookup_uri(self.backend.session, uri).tracks())
+                tracks.extend(self._lookup_uri(uri))
             except (ValueError, NotFoundError, TidalError):
                 logger.warning("Lookup failed for: %s", uri)
         return tracks
+
+    def _lookup_uri(self, uri: str) -> list:
+        """Resolve a URI to built MopidyTrack objects."""
+        session = self.backend.session
+        parsed = URI.from_string(uri)
+
+        if parsed.type == URIType.TRACK:
+            return [build_track(session.track(parsed.track))]
+        if parsed.type == URIType.ALBUM:
+            return build_tracks(session.get_album_tracks(int(parsed.album)))
+        if parsed.type == URIType.PLAYLIST:
+            return build_tracks(session.get_playlist_tracks(parsed.playlist))
+        if parsed.type == URIType.MIX:
+            mix = session.mix(parsed.mix)
+            return build_tracks(t for t in mix.items() if hasattr(t, "track_num"))
+        if parsed.type == URIType.ARTIST:
+            return build_tracks(session.get_artist_tracks(int(parsed.artist)))
+        return []

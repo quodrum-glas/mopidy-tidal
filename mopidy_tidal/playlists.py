@@ -13,7 +13,8 @@ from mopidy.models import Playlist, Ref
 
 from mopidy_tidal.display import alert_item, tidal_item
 from mopidy_tidal.helpers import login_required
-from mopidy_tidal.models import lookup_uri, model_factory_map
+from mopidy_tidal.tidal.build import build_playlist, build_tracks
+from mopidy_tidal.tidal.refs import playlist_ref, track_ref
 from mopidy_tidal.uri import URI, URIType
 
 logger = logging.getLogger(__name__)
@@ -56,25 +57,29 @@ class TidalPlaylistsProvider(PlaylistsProvider):
     @cachedmethod(lambda self: self.__as_list_cache)
     def as_list(self) -> list[Ref]:
         session = self.backend.session
-
-        # Use enhanced oapi user playlists
         results = session.get_user_playlists()
-        logger.debug("Using enhanced oapi user playlists: %d items", len(results))
 
         return [
-            *(m.ref.replace(name=tidal_item(m.ref.name)) for m in model_factory_map(results)),
+            *(playlist_ref(p).replace(name=tidal_item(p.name)) for p in results),
             *(Ref.playlist(uri=pl.uri, name=tidal_item(alert_item(pl.name))) for pl in self._injected.values()),
         ]
 
     @_intercept_injected
     def get_items(self, uri: str) -> list[Ref] | None:
-        return [t.ref for t in lookup_uri(self.backend.session, uri).tracks()]
+        parsed = URI.from_string(uri)
+        session = self.backend.session
+        tracks = session.get_playlist_tracks(parsed.playlist)
+        return [track_ref(t) for t in tracks]
 
     # -- lookup -----------------------------------------------------------
 
     @_intercept_injected
     def lookup(self, uri: str) -> Playlist | None:
-        return lookup_uri(self.backend.session, uri).full
+        parsed = URI.from_string(uri)
+        session = self.backend.session
+        api_playlist = session.playlist(parsed.playlist)
+        tracks = build_tracks(session.get_playlist_tracks(str(api_playlist.id)))
+        return build_playlist(api_playlist, tracks)
 
     # -- save / create / delete -------------------------------------------
 
@@ -125,9 +130,12 @@ class TidalPlaylistsProvider(PlaylistsProvider):
         if not seed:
             return None
 
-        track = lookup_uri(self.backend.session, seed.uri)
-        logger.info("Generating radio from: %s", track.name)
-        return playlist.replace(name=f"radio: {track.name}", tracks=[t.full for t in track.radio()])
+        session = self.backend.session
+        parsed = URI.from_string(seed.uri)
+        api_track = session.track(parsed.track)
+        logger.info("Generating radio from: %s", api_track.name)
+        radio_tracks = build_tracks(api_track.similar_tracks)
+        return playlist.replace(name=f"radio: {api_track.name}", tracks=radio_tracks)
 
     # -- CRUD helpers -----------------------------------------------------
 
