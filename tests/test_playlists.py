@@ -58,17 +58,22 @@ class TestInterceptLookup:
         assert result.name == "radio"
 
     def test_non_injected_falls_through(self, provider):
-        with patch("mopidy_tidal.playlists.lookup_uri") as mock_lookup:
-            mock_lookup.return_value = MagicMock(full=_pl("tidal:playlist:999", "real"))
-            result = provider.lookup("tidal:playlist:999")
-            assert result.name == "real"
-            mock_lookup.assert_called_once()
+        api_pl = MagicMock()
+        api_pl.id = "999"
+        api_pl.name = "real"
+        api_pl.last_updated = "2024-06-01T00:00:00"
+        provider.backend.session.playlist.return_value = api_pl
+        provider.backend.session.get_playlist_tracks.return_value = []
+
+        result = provider.lookup("tidal:playlist:999")
+        assert result.name == "real"
+        assert result.uri == "tidal:playlist:999"
+        provider.backend.session.playlist.assert_called_once_with("999")
 
     def test_non_playlist_uri_falls_through(self, provider):
-        with patch("mopidy_tidal.playlists.lookup_uri") as mock_lookup:
-            mock_lookup.return_value = MagicMock(full=_pl("tidal:album:1", "alb"))
+        # A non-playlist URI has no typed id for .playlist and raises.
+        with pytest.raises(AttributeError):
             provider.lookup("tidal:album:1")
-            mock_lookup.assert_called_once()
 
 
 # -- intercept decorator: get_items ---------------------------------------
@@ -84,11 +89,12 @@ class TestInterceptGetItems:
         assert refs[0].name == "A"
 
     def test_non_injected_falls_through(self, provider):
-        mock_model = MagicMock()
-        mock_model.tracks.return_value = []
-        with patch("mopidy_tidal.playlists.lookup_uri", return_value=mock_model):
-            provider.get_items("tidal:playlist:999")
-            mock_model.tracks.assert_called_once()
+        from tests.test_models import _fake_track
+
+        provider.backend.session.get_playlist_tracks.return_value = [_fake_track("1", "A")]
+        refs = provider.get_items("tidal:playlist:999")
+        provider.backend.session.get_playlist_tracks.assert_called_once_with("999")
+        assert [r.uri for r in refs] == ["tidal:track:1"]
 
 
 # -- intercept decorator: save --------------------------------------------
@@ -119,18 +125,18 @@ class TestGetRadio:
         assert result is None
 
     def test_generates_radio_from_last_track(self, provider):
+        from tests.test_models import _fake_track
+
         seed_track = _track("tidal:track:42", "Seed")
         pl = _pl("tidal:playlist:radio", "radio", [seed_track])
 
-        mock_model = MagicMock()
-        mock_model.name = "Seed"
-        radio_track = MagicMock()
-        radio_track.full = _track("tidal:track:99", "Radio Track")
-        mock_model.radio.return_value = [radio_track]
+        api_track = _fake_track("42", "Seed")
+        api_track.similar_tracks = [_fake_track("99", "Radio Track")]
+        provider.backend.session.track.return_value = api_track
 
-        with patch("mopidy_tidal.playlists.lookup_uri", return_value=mock_model):
-            result = provider._get_radio(pl)
+        result = provider._get_radio(pl)
 
+        provider.backend.session.track.assert_called_once_with("42")
         assert result.name == "radio: Seed"
         assert len(result.tracks) == 1
 
@@ -187,13 +193,9 @@ class TestAsList:
         mock_pl.name = "My Playlist"
         backend.session.get_user_playlists.return_value = [mock_pl]
 
-        with patch("mopidy_tidal.playlists.model_factory_map") as mock_mfm:
-            mock_model = MagicMock()
-            mock_model.ref = Ref.playlist(uri="tidal:playlist:pl1", name="My Playlist")
-            mock_mfm.return_value = iter([mock_model])
-            refs = provider.as_list()
-            # Should include the real playlist + injected playlists
-            assert len(refs) >= 1
+        refs = provider.as_list()
+        # Should include the real playlist + injected playlists
+        assert any(r.uri == "tidal:playlist:pl1" for r in refs)
 
 
 # -- _create / _add_tracks / _remove_tracks --------------------------------

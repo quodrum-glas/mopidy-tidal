@@ -120,45 +120,38 @@ class TestLibraryBrowse:
         artist = MagicMock()
         artist.id = "1"
         artist.name = "A"
-        artist.image = MagicMock(return_value="https://img.jpg")
         library.backend.session.get_user_artists.return_value = [artist]
 
-        with patch("mopidy_tidal.library.model_factory_map") as mock_mfm:
-            mock_model = MagicMock()
-            mock_model.ref = Ref.artist(uri="tidal:artist:1", name="A")
-            mock_mfm.return_value = iter([mock_model])
+        with patch("mopidy_tidal.library.browse") as mock_browse:
+            mock_browse.return_value = [Ref.artist(uri="tidal:artist:1", name="A")]
             refs = library.browse("tidal:my_artists")
+            mock_browse.assert_called_once_with(library.backend.session, "tidal:my_artists")
             assert len(refs) == 1
 
 
 class TestLibraryLookup:
     def test_single_uri_string(self, library):
-        mock_model = MagicMock()
-        mock_track = MagicMock()
-        mock_track.full = "full_track"
-        mock_model.tracks.return_value = [mock_track]
+        from tests.test_models import _fake_track
 
-        with patch("mopidy_tidal.library.lookup_uri", return_value=mock_model):
-            result = library.lookup("tidal:track:1")
-            assert result == ["full_track"]
+        library.backend.session.track.return_value = _fake_track("1", "Song")
+        result = library.lookup("tidal:track:1")
+        assert [t.uri for t in result] == ["tidal:track:1"]
+        library.backend.session.track.assert_called_once_with("1")
 
     def test_invalid_uri_skipped(self, library):
-        with patch("mopidy_tidal.library.lookup_uri", side_effect=ValueError):
-            result = library.lookup("tidal:bogus:1")
-            assert result == []
+        # A non-tidal URI raises ValueError in URI.from_string → skipped.
+        result = library.lookup("spotify:track:1")
+        assert result == []
 
 
 class TestLibraryGetImages:
     def test_returns_images(self, library):
-        mock_model = MagicMock()
-        mock_model.images = ["img1"]
-
-        with patch("mopidy_tidal.library.lookup_uri", return_value=mock_model):
+        with patch("mopidy_tidal.library.get_images", return_value=["img1"]):
             result = library.get_images(["tidal:track:1"])
             assert result == {"tidal:track:1": ["img1"]}
 
     def test_invalid_uri_returns_empty(self, library):
-        with patch("mopidy_tidal.library.lookup_uri", side_effect=ValueError):
+        with patch("mopidy_tidal.library.get_images", side_effect=ValueError):
             result = library.get_images(["tidal:bogus:1"])
             assert result == {"tidal:bogus:1": []}
 
@@ -210,17 +203,13 @@ class TestLibrarySearch:
 
 class TestLibraryBrowseFallback:
     def test_browse_entity_uri_calls_lookup(self, library):
-        mock_model = MagicMock()
         mock_ref = Ref.track(uri="tidal:track:1", name="T")
-        mock_item = MagicMock()
-        mock_item.ref = mock_ref
-        mock_model.items.return_value = [mock_item]
-
-        with patch("mopidy_tidal.library.lookup_uri", return_value=mock_model):
+        with patch("mopidy_tidal.library.browse", return_value=[mock_ref]) as mock_browse:
             refs = library.browse("tidal:album:42")
+            mock_browse.assert_called_once_with(library.backend.session, "tidal:album:42")
             assert len(refs) == 1
             assert refs[0].name == "T"
 
     def test_browse_entity_uri_error_returns_empty(self, library):
-        with patch("mopidy_tidal.library.lookup_uri", side_effect=ValueError):
+        with patch("mopidy_tidal.library.browse", side_effect=ValueError):
             assert library.browse("tidal:album:42") == []

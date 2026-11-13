@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from mopidy_tidal.search import tidal_search
 
@@ -50,9 +50,6 @@ class TestTidalSearch:
         session = self._mock_session(tracks=[track], albums=[], artists=[], playlists=[])
         session.get_tracks.return_value = [track]
 
-        with patch("mopidy_tidal.search.model_factory") as mock_mf:
-            mock_model = MagicMock()
-            mock_model.full = "full_track"
-            mock_mf.return_value = mock_model
-            result = tidal_search(session, query={"track_name": ["unique result test"]}, total=10, exact=False)
-            assert "tracks" in result
+        result = tidal_search(session, query={"track_name": ["unique result test"]}, total=10, exact=False)
+        assert "tracks" in result
+        assert [t.uri for t in result["tracks"]] == ["tidal:track:1"]
