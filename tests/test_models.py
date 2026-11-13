@@ -253,3 +253,120 @@ class TestBuildPlaylistAsAlbum:
         assert isinstance(result, mm.Album)
         assert result.uri == "tidal:playlist:400"
         assert result.name == "My Playlist"
+
+
+# -- images ---------------------------------------------------------------
+
+
+class TestTrackImages:
+    """Mopidy requests images for tracks; a track's cover comes from its
+    album. The album on session.track() is NOT cover-hydrated, so the cover is
+    resolved by fetching the album (get_album includes coverArt). Results are
+    cached per URI and the album cover is cached per album URI.
+    """
+
+    def _session(self):
+        session = MagicMock()
+        track = MagicMock()
+        track.album = MagicMock()
+        track.album.id = "55"
+        # track.album itself has NO usable cover (matches live behaviour).
+        track.album.cover.return_value = ""
+        session.track.return_value = track
+
+        resolved = MagicMock()
+        resolved.cover.return_value = "https://img/cover.jpg"
+        session.album.return_value = resolved
+        return session
+
+    def test_track_image_is_album_cover(self):
+        from mopidy_tidal.tidal.images import get_images
+
+        imgs = get_images(self._session(), "tidal:track:1")
+        assert [i.uri for i in imgs] == ["https://img/cover.jpg"]
+
+    def test_cover_resolved_by_album_fetch(self):
+        from mopidy_tidal.tidal.images import get_images
+
+        session = self._session()
+        get_images(session, "tidal:track:1")
+        # The cover comes from the cover-hydrated album fetch, since
+        # track.album carries none.
+        session.album.assert_called_once_with("55")
+
+    def test_result_is_cached_per_uri(self):
+        from mopidy_tidal.tidal.images import get_images
+
+        session = self._session()
+        get_images(session, "tidal:track:1")
+        get_images(session, "tidal:track:1")
+        session.track.assert_called_once()
+
+    def test_no_album_yields_no_images(self):
+        from mopidy_tidal.tidal.images import get_images
+
+        session = self._session()
+        session.track.return_value.album = None
+        assert get_images(session, "tidal:track:1") == []
+        session.album.assert_not_called()
+
+
+class TestBatchImages:
+    """A page of track URIs must collapse to grouped API calls (one
+    get_tracks + one get_albums), not a request per track — that is what
+    avoids TIDAL rate-limiting.
+    """
+
+    def _track(self, track_id, album_id):
+        t = MagicMock()
+        t.id = track_id
+        t.album = MagicMock()
+        t.album.id = album_id
+        return t
+
+    def _album(self, album_id, cover):
+        a = MagicMock()
+        a.id = album_id
+        a.cover.return_value = cover
+        return a
+
+    def test_page_uses_two_grouped_calls(self):
+        from mopidy_tidal.tidal.images import get_images_batch
+
+        session = MagicMock()
+        # Three tracks across two albums.
+        session.get_tracks.return_value = [self._track("1", "100"), self._track("2", "100"), self._track("3", "200")]
+        session.get_albums.return_value = [
+            self._album("100", "https://img/100.jpg"),
+            self._album("200", "https://img/200.jpg"),
+        ]
+
+        uris = ["tidal:track:1", "tidal:track:2", "tidal:track:3"]
+        result = get_images_batch(session, uris)
+
+        # Exactly one batched track fetch and one batched album fetch.
+        session.get_tracks.assert_called_once_with(track_ids=["1", "2", "3"])
+        session.get_albums.assert_called_once()
+        assert [i.uri for i in result["tidal:track:1"]] == ["https://img/100.jpg"]
+        assert [i.uri for i in result["tidal:track:2"]] == ["https://img/100.jpg"]
+        assert [i.uri for i in result["tidal:track:3"]] == ["https://img/200.jpg"]
+
+    def test_cache_hits_skip_the_batch(self):
+        from mopidy_tidal.tidal import cache
+        from mopidy_tidal.tidal.images import get_images_batch
+
+        cache.put_images("tidal:track:1", ["cached"])
+        session = MagicMock()
+        session.get_tracks.return_value = [self._track("2", "100")]
+        session.get_albums.return_value = [self._album("100", "https://img/100.jpg")]
+
+        result = get_images_batch(session, ["tidal:track:1", "tidal:track:2"])
+
+        assert result["tidal:track:1"] == ["cached"]
+        # Only the uncached track is fetched.
+        session.get_tracks.assert_called_once_with(track_ids=["2"])
+
+    def test_empty_page(self):
+        from mopidy_tidal.tidal.images import get_images_batch
+
+        assert get_images_batch(MagicMock(), []) == {}

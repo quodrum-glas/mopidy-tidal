@@ -3,6 +3,7 @@
 Tracks are immutable → large LRU, no TTL.
 Albums/Artists are stable → LRU with generous size.
 Collections (playlist membership) are volatile → short TTL.
+Images (artwork URLs) → LRU, keyed by URI.
 Futures (deferred page content) → TTL.
 """
 
@@ -14,6 +15,7 @@ _tracks: LRUCache = LRUCache(maxsize=16_384)
 _albums: LRUCache = LRUCache(maxsize=4_096)
 _artists: LRUCache = LRUCache(maxsize=4_096)
 _collections: TTLCache = TTLCache(maxsize=1_024, ttl=300)
+_images: LRUCache = LRUCache(maxsize=4_096)
 _futures: TTLCache = TTLCache(maxsize=512, ttl=86_400)
 
 
@@ -65,6 +67,17 @@ def invalidate_collection(key: str) -> None:
     _collections.pop(key, None)
 
 
+# -- images (artwork URLs, keyed by URI) ----------------------------------
+
+
+def get_images(uri: str):
+    return _images.get(uri)
+
+
+def put_images(uri: str, images: list) -> None:
+    _images[uri] = images
+
+
 # -- futures (deferred page content) --------------------------------------
 
 
@@ -84,4 +97,5 @@ def clear():
     _albums.clear()
     _artists.clear()
     _collections.clear()
+    _images.clear()
     _futures.clear()

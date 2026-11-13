@@ -131,3 +131,23 @@ class TestBrowseDefersSubNavigation:
         page_ref = next(r for r in refs if r.uri == "tidal:future:artist-page:42")
         cache.get_future(page_ref.uri)()
         assert session.get_artist_page.call_count == 1
+
+
+class TestBrowseWarmsTrackCache:
+    """Browsing a track list warms the per-track cache so Mopidy's follow-up
+    per-track lookup() calls (which the actor serialises) are cache hits
+    instead of N serial session.track() round trips.
+    """
+
+    def test_browse_playlist_caches_tracks(self):
+        from mopidy_tidal.tidal.browse import browse_playlist
+        from tests.test_models import _fake_track
+
+        session = MagicMock()
+        session.get_playlist_tracks.return_value = [_fake_track("1", "A"), _fake_track("2", "B")]
+
+        browse_playlist(session, "pl1")
+
+        # Both tracks are now in the cache, ready for lookup() without a fetch.
+        assert cache.get_track("1") is not None
+        assert cache.get_track("2") is not None

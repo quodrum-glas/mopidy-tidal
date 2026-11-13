@@ -138,22 +138,41 @@ class TestLibraryLookup:
         assert [t.uri for t in result] == ["tidal:track:1"]
         library.backend.session.track.assert_called_once_with("1")
 
+    def test_multiple_track_uris(self, library):
+        from tests.test_models import _fake_track
+
+        library.backend.session.track.side_effect = [_fake_track("1", "A"), _fake_track("2", "B")]
+        result = library.lookup(["tidal:track:1", "tidal:track:2"])
+        assert [t.uri for t in result] == ["tidal:track:1", "tidal:track:2"]
+
     def test_invalid_uri_skipped(self, library):
         # A non-tidal URI raises ValueError in URI.from_string → skipped.
         result = library.lookup("spotify:track:1")
         assert result == []
 
+    def test_cached_track_skips_fetch(self, library):
+        from mopidy.models import Track as MopidyTrack
+
+        from mopidy_tidal.tidal import cache
+
+        # Simulate a track already built during a prior browse/search.
+        cache.put_track("1", MopidyTrack(uri="tidal:track:1", name="Song"))
+        result = library.lookup("tidal:track:1")
+        assert [t.uri for t in result] == ["tidal:track:1"]
+        # No API call — served from the built-track cache.
+        library.backend.session.track.assert_not_called()
+
 
 class TestLibraryGetImages:
-    def test_returns_images(self, library):
-        with patch("mopidy_tidal.library.get_images", return_value=["img1"]):
+    def test_delegates_to_batch(self, library):
+        with patch("mopidy_tidal.library.get_images_batch") as mock_batch:
+            mock_batch.return_value = {"tidal:track:1": ["img1"]}
             result = library.get_images(["tidal:track:1"])
+            mock_batch.assert_called_once_with(library.backend.session, ["tidal:track:1"])
             assert result == {"tidal:track:1": ["img1"]}
 
-    def test_invalid_uri_returns_empty(self, library):
-        with patch("mopidy_tidal.library.get_images", side_effect=ValueError):
-            result = library.get_images(["tidal:bogus:1"])
-            assert result == {"tidal:bogus:1": []}
+    def test_empty_uris_returns_empty(self, library):
+        assert library.get_images([]) == {}
 
 
 class TestLibraryGetDistinct:

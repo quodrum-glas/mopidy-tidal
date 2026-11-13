@@ -13,6 +13,7 @@ from tidalapi.models_v1 import Page as V1Page
 
 from mopidy_tidal.display import feat_item
 from mopidy_tidal.tidal import cache
+from mopidy_tidal.tidal.build import build_track, build_tracks
 from mopidy_tidal.tidal.refs import album_ref, playlist_ref, refs_for, track_ref
 from mopidy_tidal.uri import URI, URIType
 
@@ -70,8 +71,9 @@ def browse_artist(session, artist_id: str) -> list[Ref]:
         ref = playlist_ref(p)
         result.append(ref.replace(name=f"Radio: {ref.name}"))
 
-    # Top tracks
+    # Top tracks (warm the per-track cache for later lookup())
     for t in session.get_artist_tracks(aid):
+        build_track(t)
         result.append(track_ref(t))
 
     # Albums
@@ -114,20 +116,28 @@ def browse_album(session, album_id: str) -> list[Ref]:
         result=result,
     )
 
-    # Tracks
+    # Tracks (warm the per-track cache for later lookup())
     for t in session.get_album_tracks(aid):
+        build_track(t)
         result.append(track_ref(t))
 
     return result
 
 
 def browse_playlist(session, playlist_id: str) -> list[Ref]:
-    return [track_ref(t) for t in session.get_playlist_tracks(playlist_id)]
+    tracks = session.get_playlist_tracks(playlist_id)
+    # Warm the per-track cache while we have the hydrated tracks, so Mopidy's
+    # follow-up per-track lookup() calls are cache hits instead of N serial
+    # session.track() round trips (the actor serialises them).
+    build_tracks(tracks)
+    return [track_ref(t) for t in tracks]
 
 
 def browse_mix(session, mix_id: str) -> list[Ref]:
     mix = session.mix(mix_id)
-    return [track_ref(t) for t in mix.items() if hasattr(t, "track_num")]
+    tracks = [t for t in mix.items() if hasattr(t, "track_num")]
+    build_tracks(tracks)
+    return [track_ref(t) for t in tracks]
 
 
 # -- pages (v1 first-class concept) --------------------------------------

@@ -17,7 +17,7 @@ from mopidy_tidal.tidal.build import (  # noqa: F401
     build_track,
     build_tracks,
 )
-from mopidy_tidal.tidal.images import get_images  # noqa: F401
+from mopidy_tidal.tidal.images import get_images, get_images_batch  # noqa: F401
 from mopidy_tidal.tidal.refs import ref_for, refs_for  # noqa: F401
 
 __all__ = [
@@ -29,6 +29,7 @@ __all__ = [
     "build_track",
     "build_tracks",
     "get_images",
+    "get_images_batch",
     "ref_for",
     "refs_for",
 ]

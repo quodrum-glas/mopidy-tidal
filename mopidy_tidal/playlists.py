@@ -69,6 +69,9 @@ class TidalPlaylistsProvider(PlaylistsProvider):
     def get_items(self, uri: str) -> list[Ref] | None:
         parsed = URI.from_string(uri)
         tracks = self._playlist_tracks(parsed.playlist)
+        # Warm the per-track cache so Mopidy's follow-up lookup() calls are
+        # cache hits rather than serial session.track() round trips.
+        build_tracks(tracks)
         return [track_ref(t) for t in tracks]
 
     # -- lookup -----------------------------------------------------------

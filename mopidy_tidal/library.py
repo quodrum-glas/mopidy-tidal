@@ -11,7 +11,7 @@ from tidalapi.exceptions import NotFoundError, TidalError
 from mopidy_tidal.display import tidal_item
 from mopidy_tidal.helpers import login_required
 from mopidy_tidal.search import tidal_search
-from mopidy_tidal.tidal import browse, build_track, build_tracks, get_images
+from mopidy_tidal.tidal import browse, build_track, build_tracks, cache, get_images_batch
 from mopidy_tidal.uri import URI, URIType
 
 _ARTIST_FIELDS = frozenset({"artist", "albumartist", "performer", "composer"})
@@ -63,19 +63,19 @@ class TidalLibraryProvider(backend.LibraryProvider):
         return SearchResult(**tidal_search(self.backend.session, query=query, total=total, exact=exact))
 
     def get_images(self, uris: list[str]) -> dict[str, list]:
-        result: dict[str, list] = {}
-        for uri in uris:
-            try:
-                result[uri] = get_images(self.backend.session, uri)
-            except (ValueError, NotFoundError, TidalError):
-                result[uri] = []
-        return result
+        # Mopidy hands the whole page of URIs to the backend at once, so group
+        # them into batched API calls (one get_tracks + one get_albums for all
+        # track covers) instead of a request per item. Per-item requests are
+        # what triggers TIDAL rate-limiting on a fresh track list.
+        if not uris:
+            return {}
+        return get_images_batch(self.backend.session, uris)
 
     def lookup(self, uris: str | list[str]) -> list:
         logger.debug("TidalLibraryProvider.lookup(%r)", uris)
         if isinstance(uris, str):
             uris = [uris]
-        tracks = []
+        tracks: list = []
         for uri in uris:
             try:
                 tracks.extend(self._lookup_uri(uri))
@@ -89,6 +89,12 @@ class TidalLibraryProvider(backend.LibraryProvider):
         parsed = URI.from_string(uri)
 
         if parsed.type == URIType.TRACK:
+            # Reuse the already-built track if it was cached by a prior
+            # browse/search, skipping the session.track() round trip entirely
+            # (tracks are immutable, so this is always safe).
+            cached = cache.get_track(parsed.track)
+            if cached is not None:
+                return [cached]
             return [build_track(session.track(parsed.track))]
         if parsed.type == URIType.ALBUM:
             return build_tracks(session.get_album_tracks(int(parsed.album)))
