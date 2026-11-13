@@ -61,6 +61,10 @@ def put_collection(key: str, items: list):
     _collections[key] = items
 
 
+def invalidate_collection(key: str) -> None:
+    _collections.pop(key, None)
+
+
 # -- futures (deferred page content) --------------------------------------
 
 

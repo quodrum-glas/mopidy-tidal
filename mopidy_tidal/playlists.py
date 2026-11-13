@@ -13,6 +13,7 @@ from mopidy.models import Playlist, Ref
 
 from mopidy_tidal.display import alert_item, tidal_item
 from mopidy_tidal.helpers import login_required
+from mopidy_tidal.tidal import cache
 from mopidy_tidal.tidal.build import build_playlist, build_tracks
 from mopidy_tidal.tidal.refs import playlist_ref, track_ref
 from mopidy_tidal.uri import URI, URIType
@@ -67,8 +68,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
     @_intercept_injected
     def get_items(self, uri: str) -> list[Ref] | None:
         parsed = URI.from_string(uri)
-        session = self.backend.session
-        tracks = session.get_playlist_tracks(parsed.playlist)
+        tracks = self._playlist_tracks(parsed.playlist)
         return [track_ref(t) for t in tracks]
 
     # -- lookup -----------------------------------------------------------
@@ -78,8 +78,24 @@ class TidalPlaylistsProvider(PlaylistsProvider):
         parsed = URI.from_string(uri)
         session = self.backend.session
         api_playlist = session.playlist(parsed.playlist)
-        tracks = build_tracks(session.get_playlist_tracks(str(api_playlist.id)))
+        tracks = build_tracks(self._playlist_tracks(str(api_playlist.id)))
         return build_playlist(api_playlist, tracks)
+
+    def _playlist_tracks(self, playlist_id: str) -> list:
+        """Return a playlist's raw tidalapi tracks, cached per playlist.
+
+        A playlist's membership is volatile, so this uses the short-TTL
+        collection cache and is invalidated explicitly on save/delete. Both
+        get_items and lookup share it, so re-opening a playlist (or looking it
+        up right after browsing it) does not re-fetch the track list.
+        """
+        key = f"playlist-tracks:{playlist_id}"
+        cached = cache.get_collection(key)
+        if cached is not None:
+            return cached
+        tracks = self.backend.session.get_playlist_tracks(playlist_id)
+        cache.put_collection(key, tracks)
+        return tracks
 
     # -- save / create / delete -------------------------------------------
 
@@ -114,6 +130,7 @@ class TidalPlaylistsProvider(PlaylistsProvider):
         try:
             self.backend.session.delete_playlist(parsed.id)
             logger.info("Deleted playlist: %s", uri)
+            cache.invalidate_collection(f"playlist-tracks:{parsed.id}")
             self.refresh()
             return True
         except Exception:
@@ -150,12 +167,14 @@ class TidalPlaylistsProvider(PlaylistsProvider):
         track_ids = [str(URI.from_string(t).track) for t in track_uris]
         logger.info("Adding %d tracks to %s", len(track_ids), uri)
         self.backend.session.add_tracks_to_playlist(parsed.id, track_ids)
+        cache.invalidate_collection(f"playlist-tracks:{parsed.id}")
 
     def _remove_tracks(self, uri: str, track_uris: set[str]) -> None:
         parsed = URI.from_string(uri)
         track_ids = [str(URI.from_string(t).track) for t in track_uris]
         logger.info("Removing %d tracks from %s", len(track_ids), uri)
         self.backend.session.remove_tracks_from_playlist(parsed.id, track_ids)
+        cache.invalidate_collection(f"playlist-tracks:{parsed.id}")
 
 
 def _empty(name: str) -> Playlist:
