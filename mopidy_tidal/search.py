@@ -13,6 +13,12 @@ from mopidy_tidal.models.playlist import PlaylistAsAlbum
 
 logger = logging.getLogger(__name__)
 
+# TIDAL caps each relationship in a searchResults response at 20 items and
+# ignores page[limit]. Beyond that, results come from cursor pagination on the
+# per-type endpoints, so the single combined request is only worth it when the
+# caller wants no more than one page.
+_SEARCH_PAGE = 20
+
 
 @cached(
     LRUCache(maxsize=128),
@@ -42,7 +48,8 @@ def tidal_search(session, /, *, query, total, exact=False):
     if want_playlists:
         include.append("playlists")
 
-    results = session.search(search_term, include=include) if len(include) > 1 else None
+    combined = len(include) > 1 and total <= _SEARCH_PAGE
+    results = session.search(search_term, include=include) if combined else None
 
     out: dict[str, list] = defaultdict(list)
 
