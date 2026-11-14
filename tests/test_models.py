@@ -310,6 +310,32 @@ class TestTrackImages:
         assert get_images(session, "tidal:track:1") == []
         session.album.assert_not_called()
 
+    def test_not_found_is_negative_cached(self):
+        from tidalapi.exceptions import NotFoundError
+
+        from mopidy_tidal.tidal.images import get_images
+
+        session = MagicMock()
+        session.track.side_effect = NotFoundError("gone")
+        assert get_images(session, "tidal:track:1") == []
+        assert get_images(session, "tidal:track:1") == []
+        # Unavailable track resolved as empty and cached — fetched only once.
+        session.track.assert_called_once()
+
+    def test_transient_error_is_not_cached(self):
+        from tidalapi.exceptions import TidalError
+
+        from mopidy_tidal.tidal.images import get_images
+
+        session = MagicMock()
+        session.track.side_effect = TidalError("429 throttled", status=429)
+        # A transient error propagates and is NOT cached, so it can retry.
+        import pytest
+
+        with pytest.raises(TidalError):
+            get_images(session, "tidal:track:1")
+        assert cache.get_images("tidal:track:1") is None
+
 
 class TestBatchImages:
     """A page of track URIs must collapse to grouped API calls (one

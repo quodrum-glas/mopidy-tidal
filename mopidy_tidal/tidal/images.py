@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 
 from mopidy.models import Image
+from tidalapi.exceptions import NotFoundError
 
 from mopidy_tidal.tidal import cache
 from mopidy_tidal.uri import URI, URIType
@@ -19,22 +20,32 @@ IMAGE_SIZE = 320
 
 
 def get_images(session, uri: str) -> list[Image]:
-    """Resolve images for any tidal URI (cached per URI)."""
+    """Resolve images for any tidal URI (cached per URI).
+
+    A NotFound result is cached as empty: unavailable/region-locked tracks
+    (common in long playlists) will never resolve, so there is no point
+    re-hitting the API each time the user scrolls past them. Transient errors
+    (throttling, timeouts) are *not* cached — they propagate and retry later.
+    """
     cached = cache.get_images(uri)
     if cached is not None:
         return cached
 
     parsed = URI.from_string(uri)
-    if parsed.type == URIType.TRACK:
-        images = _track_images(session, parsed.track)
-    elif parsed.type == URIType.ALBUM:
-        images = _album_images(session, parsed.album)
-    elif parsed.type == URIType.ARTIST:
-        images = _artist_images(session, parsed.artist)
-    elif parsed.type == URIType.PLAYLIST:
-        images = _playlist_images(session, parsed.playlist)
-    else:
-        images = []
+    try:
+        if parsed.type == URIType.TRACK:
+            images = _track_images(session, parsed.track)
+        elif parsed.type == URIType.ALBUM:
+            images = _album_images(session, parsed.album)
+        elif parsed.type == URIType.ARTIST:
+            images = _artist_images(session, parsed.artist)
+        elif parsed.type == URIType.PLAYLIST:
+            images = _playlist_images(session, parsed.playlist)
+        else:
+            images = []
+    except NotFoundError:
+        cache.put_images(uri, [])
+        return []
 
     cache.put_images(uri, images)
     return images
