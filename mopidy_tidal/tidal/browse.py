@@ -13,11 +13,12 @@ from tidalapi.models_v1 import Page as V1Page
 
 from mopidy_tidal.display import feat_item
 from mopidy_tidal.tidal import cache
-from mopidy_tidal.tidal.build import build_track, build_tracks
+from mopidy_tidal.tidal.build import HYDRATE_WINDOW, build_track, build_tracks, prefetch_tracks
 from mopidy_tidal.tidal.refs import album_ref, playlist_ref, refs_for, track_ref
 from mopidy_tidal.uri import URI, URIType
 
 logger = logging.getLogger(__name__)
+
 
 # -- top-level directory --------------------------------------------------
 
@@ -71,9 +72,8 @@ def browse_artist(session, artist_id: str) -> list[Ref]:
         ref = playlist_ref(p)
         result.append(ref.replace(name=f"Radio: {ref.name}"))
 
-    # Top tracks (warm the per-track cache for later lookup())
+    # Top tracks
     for t in session.get_artist_tracks(aid):
-        build_track(t)
         result.append(track_ref(t))
 
     # Albums
@@ -116,27 +116,30 @@ def browse_album(session, album_id: str) -> list[Ref]:
         result=result,
     )
 
-    # Tracks (warm the per-track cache for later lookup())
-    for t in session.get_album_tracks(aid):
-        build_track(t)
+    # Tracks: ref all, warm the per-track cache for the first window only.
+    for i, t in enumerate(session.get_album_tracks(aid)):
+        if i < HYDRATE_WINDOW:
+            build_track(t)
         result.append(track_ref(t))
 
     return result
 
 
 def browse_playlist(session, playlist_id: str) -> list[Ref]:
-    tracks = session.get_playlist_tracks(playlist_id)
-    # Warm the per-track cache while we have the hydrated tracks, so Mopidy's
-    # follow-up per-track lookup() calls are cache hits instead of N serial
-    # session.track() round trips (the actor serialises them).
-    build_tracks(tracks)
+    # Items-only: fast, returns every track's name without hydrating the whole
+    # list. Then hydrate just the first window so the first screen's lookups
+    # are cache hits; the rest load lazily as the user scrolls.
+    tracks = session.get_playlist(playlist_id).tracks
+    prefetch_tracks(session, [str(t.id) for t in tracks])
     return [track_ref(t) for t in tracks]
 
 
 def browse_mix(session, mix_id: str) -> list[Ref]:
     mix = session.mix(mix_id)
     tracks = [t for t in mix.items() if hasattr(t, "track_num")]
-    build_tracks(tracks)
+    # Mix items come hydrated in one fetch, so warm the first window from them
+    # directly (no extra calls); deeper rows resolve lazily.
+    build_tracks(tracks[:HYDRATE_WINDOW])
     return [track_ref(t) for t in tracks]
 
 

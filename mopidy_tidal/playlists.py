@@ -14,7 +14,7 @@ from mopidy.models import Playlist, Ref
 from mopidy_tidal.display import alert_item, tidal_item
 from mopidy_tidal.helpers import login_required
 from mopidy_tidal.tidal import cache
-from mopidy_tidal.tidal.build import build_playlist, build_tracks
+from mopidy_tidal.tidal.build import build_playlist, build_tracks, prefetch_tracks
 from mopidy_tidal.tidal.refs import playlist_ref, track_ref
 from mopidy_tidal.uri import URI, URIType
 
@@ -68,10 +68,12 @@ class TidalPlaylistsProvider(PlaylistsProvider):
     @_intercept_injected
     def get_items(self, uri: str) -> list[Ref] | None:
         parsed = URI.from_string(uri)
-        tracks = self._playlist_tracks(parsed.playlist)
-        # Warm the per-track cache so Mopidy's follow-up lookup() calls are
-        # cache hits rather than serial session.track() round trips.
-        build_tracks(tracks)
+        session = self.backend.session
+        # Items-only: fast, every track's name without hydrating the whole
+        # list. Warm only the first window so the first screen's lookups are
+        # cache hits; the rest load lazily as the user scrolls.
+        tracks = session.get_playlist(parsed.playlist).tracks
+        prefetch_tracks(session, [str(t.id) for t in tracks])
         return [track_ref(t) for t in tracks]
 
     # -- lookup -----------------------------------------------------------

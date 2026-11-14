@@ -144,10 +144,14 @@ class TestBrowseWarmsTrackCache:
         from tests.test_models import _fake_track
 
         session = MagicMock()
-        session.get_playlist_tracks.return_value = [_fake_track("1", "A"), _fake_track("2", "B")]
+        # Items-only list (fast) provides the refs...
+        session.get_playlist.return_value.tracks = [_fake_track("1", "A"), _fake_track("2", "B")]
+        # ...and the first window is hydrated via a batched get_tracks.
+        session.get_tracks.return_value = [_fake_track("1", "A"), _fake_track("2", "B")]
 
-        browse_playlist(session, "pl1")
+        refs = browse_playlist(session, "pl1")
 
-        # Both tracks are now in the cache, ready for lookup() without a fetch.
+        assert [r.uri for r in refs] == ["tidal:track:1", "tidal:track:2"]
+        # First-window tracks are warmed for lookup() without a per-track fetch.
         assert cache.get_track("1") is not None
         assert cache.get_track("2") is not None

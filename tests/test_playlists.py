@@ -91,9 +91,10 @@ class TestInterceptGetItems:
     def test_non_injected_falls_through(self, provider):
         from tests.test_models import _fake_track
 
-        provider.backend.session.get_playlist_tracks.return_value = [_fake_track("1", "A")]
+        provider.backend.session.get_playlist.return_value.tracks = [_fake_track("1", "A")]
+        provider.backend.session.get_tracks.return_value = [_fake_track("1", "A")]
         refs = provider.get_items("tidal:playlist:999")
-        provider.backend.session.get_playlist_tracks.assert_called_once_with("999")
+        provider.backend.session.get_playlist.assert_called_once_with("999")
         assert [r.uri for r in refs] == ["tidal:track:1"]
 
 
@@ -101,37 +102,37 @@ class TestInterceptGetItems:
 
 
 class TestPlaylistTracksCache:
-    def test_reopening_playlist_does_not_refetch(self, provider):
-        from tests.test_models import _fake_track
+    """lookup() hydrates a playlist's tracks and caches the list (volatile,
+    short-TTL), invalidated on membership changes. get_items() no longer uses
+    this cache — it fetches items-only for fast scrolling.
+    """
 
-        provider.backend.session.get_playlist_tracks.return_value = [_fake_track("1", "A")]
-        provider.get_items("tidal:playlist:999")
-        provider.get_items("tidal:playlist:999")
-        # Second browse of the same playlist is served from the collection cache.
-        provider.backend.session.get_playlist_tracks.assert_called_once()
-
-    def test_lookup_reuses_get_items_fetch(self, provider):
-        from tests.test_models import _fake_track
-
+    def _api_pl(self, provider):
         api_pl = MagicMock()
         api_pl.id = "999"
         api_pl.name = "P"
         api_pl.last_updated = "2024-06-01T00:00:00"
         provider.backend.session.playlist.return_value = api_pl
-        provider.backend.session.get_playlist_tracks.return_value = [_fake_track("1", "A")]
+        return api_pl
 
-        provider.get_items("tidal:playlist:999")
+    def test_relookup_playlist_does_not_refetch_tracks(self, provider):
+        from tests.test_models import _fake_track
+
+        self._api_pl(provider)
+        provider.backend.session.get_playlist_tracks.return_value = [_fake_track("1", "A")]
         provider.lookup("tidal:playlist:999")
-        # Tracks fetched once, shared between the ref path and the build path.
+        provider.lookup("tidal:playlist:999")
+        # Second lookup is served from the collection cache.
         provider.backend.session.get_playlist_tracks.assert_called_once()
 
     def test_add_tracks_invalidates_cache(self, provider):
         from tests.test_models import _fake_track
 
+        self._api_pl(provider)
         provider.backend.session.get_playlist_tracks.return_value = [_fake_track("1", "A")]
-        provider.get_items("tidal:playlist:999")
+        provider.lookup("tidal:playlist:999")
         provider._add_tracks("tidal:playlist:999", ["tidal:track:2"])
-        provider.get_items("tidal:playlist:999")
+        provider.lookup("tidal:playlist:999")
         # Membership changed → the stale listing must be refetched.
         assert provider.backend.session.get_playlist_tracks.call_count == 2
 

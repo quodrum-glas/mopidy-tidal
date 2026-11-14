@@ -79,6 +79,29 @@ def build_tracks(api_tracks) -> list[MopidyTrack]:
     return [build_track(t) for t in api_tracks]
 
 
+# How many tracks of a list to hydrate up front so the first screen's lookups
+# are cache hits; the rest load lazily as the user scrolls.
+HYDRATE_WINDOW = 40
+
+
+def prefetch_tracks(session, track_ids: list[str], window: int = HYDRATE_WINDOW) -> None:
+    """Hydrate and cache the first *window* tracks in batched calls.
+
+    Takes *session* explicitly (the pure build_* functions stay session-free).
+    Batches of 20 to respect TIDAL's filter[id] cap. Failures are non-fatal —
+    a track just stays uncached and is fetched lazily on lookup.
+    """
+    import logging
+
+    head = track_ids[:window]
+    for i in range(0, len(head), 20):
+        chunk = head[i : i + 20]
+        try:
+            build_tracks(session.get_tracks(track_ids=chunk))
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("Prefetch hydrate failed for %r", chunk)
+
+
 # -- playlists ------------------------------------------------------------
 
 
